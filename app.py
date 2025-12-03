@@ -81,31 +81,18 @@ YAHOO_CLIENT_SECRET = "a1ee51651fa5aa723cd21f0d8160edc90a22997a"
 REDIRECT_URI = "https://line-fantasy-bot.onrender.com/yahoo/callback"
 
 
-@app.route("/yahoo/login")
-def yahoo_login():
-    auth_url = (
-        "https://api.login.yahoo.com/oauth2/request_auth?"
-        f"client_id={YAHOO_CLIENT_ID}"
-        f"&redirect_uri={urllib.parse.quote(REDIRECT_URI)}"
-        "&response_type=code"
-        "&language=en-us"
-    )
-    return f"<a href='{auth_url}'>點我連接 Yahoo Fantasy 授權</a>"
-
-
 @app.route("/yahoo/callback")
 def yahoo_callback():
     code = request.args.get("code")
 
     if not code:
-        return "Yahoo 授權失敗，沒有取得 code"
+        return "Yahoo 授權失敗：沒有取得 code"
 
-    # 換取 Access Token
     token_url = "https://api.login.yahoo.com/oauth2/get_token"
 
-    basic_auth = base64.b64encode(
-        f"{YAHOO_CLIENT_ID}:{YAHOO_CLIENT_SECRET}".encode()
-    ).decode()
+    # Basic Auth 構造方式：base64("client_id:client_secret")
+    auth_str = f"{YAHOO_CLIENT_ID}:{YAHOO_CLIENT_SECRET}"
+    basic_auth = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
 
     headers = {
         "Authorization": f"Basic {basic_auth}",
@@ -118,15 +105,21 @@ def yahoo_callback():
         "code": code
     }
 
-    token_res = requests.post(token_url, headers=headers, data=data)
+    # ⚠️ Yahoo 要求 data 一定是 form-encoded，而不是 JSON
+    response = requests.post(token_url, headers=headers, data=data)
 
     try:
-        token_json = token_res.json()
+        result = response.json()
     except:
-        return f"Yahoo Token 交換失敗：{token_res.text}"
+        return f"Token API 回傳非 JSON：{response.text}"
 
-    # 回傳 token 給你看（之後會改成寫入 Google Sheet）
-    return token_json
+    # 檢查是否有錯誤
+    if "error" in result:
+        return f"Yahoo Token 換取失敗：{result}"
+
+    # 成功
+    return jsonify(result)
+
 
 # ==============================
 # LINE Webhook
@@ -225,4 +218,5 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
