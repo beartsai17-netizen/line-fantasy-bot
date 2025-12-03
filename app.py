@@ -86,8 +86,6 @@ def nba_search_player(name):
         if not rows:
             return None
 
-        # rowSet Example:
-        # [PLAYER_ID, PLAYER_NAME, TEAM_ID, TEAM_CITY, TEAM_NAME]
         r = rows[0]
         return {
             "id": r[0],
@@ -99,41 +97,6 @@ def nba_search_player(name):
         print("NBA search error:", e)
         return None
 
-
-    except Exception as e:
-        print("NBA Official Search Error:", e)
-        return None
-def nba_player_latest_game_official(player_id):
-    try:
-        url = (
-            f"https://stats.nba.com/stats/playergamelog?"
-            f"PlayerID={player_id}&Season=2024-25&SeasonType=Regular%20Season"
-        )
-
-        res = requests.get(url, headers=NBA_HEADERS).json()
-
-        rows = res["resultSets"][0]["rowSet"]
-
-        if not rows:
-            return None
-
-        g = rows[0]  # 最近一場
-
-        return {
-            "matchup": g[5],          # 對手資訊
-            "date": g[3],
-            "pts": g[26],
-            "reb": g[20],
-            "ast": g[21],
-            "stl": g[22],
-            "blk": g[23],
-            "fg_pct": g[11],
-        }
-
-    except Exception as e:
-        print("NBA Official Stats Error:", e)
-        return None
-        
 def nba_latest_game(player_id):
     try:
         url = f"{NBA_RELAY_URL}/latest?player_id={player_id}"
@@ -143,10 +106,8 @@ def nba_latest_game(player_id):
         if not rows:
             return None
 
-        g = rows[0]  # 最新一場
-
+        g = rows[0]
         return {
-            "game_date": g[3],
             "matchup": g[5],
             "pts": g[26],
             "reb": g[20],
@@ -159,6 +120,8 @@ def nba_latest_game(player_id):
     except Exception as e:
         print("NBA latest game error:", e)
         return None
+
+    
 
 
 
@@ -189,9 +152,10 @@ def handle_message(event: MessageEvent):
     # ----------------------
     # (B) NBA（已串接）
     # ----------------------
-    elif command == "nba":
-        if argument == "":
-            reply_text = "請輸入球員名稱，例如：!nba SGA"
+elif command == "nba":
+    if argument == "":
+        reply_text = "請輸入球員名稱，例如：!nba SGA"
+
     else:
         player = nba_search_player(argument)
 
@@ -264,6 +228,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
