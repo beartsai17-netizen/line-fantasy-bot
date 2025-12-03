@@ -108,6 +108,7 @@ def yahoo_callback():
 
     token_url = "https://api.login.yahoo.com/oauth2/get_token"
 
+    # Basic Auth
     auth_str = f"{YAHOO_CLIENT_ID}:{YAHOO_CLIENT_SECRET}"
     basic_auth = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
 
@@ -132,7 +133,7 @@ def yahoo_callback():
     if "error" in result:
         return f"Yahoo Token 換取失敗：{result}"
 
-    # 正確縮排在 function 內部
+    # 💥💥💥 注意：這段必須縮排在函式裡面！
     save_yahoo_token(
         result["access_token"],
         result["refresh_token"],
@@ -140,7 +141,6 @@ def yahoo_callback():
     )
 
     return "Yahoo Token 已成功儲存！你可以關閉這個視窗。"
-
 
 
 def save_yahoo_token(access_token, refresh_token, expires_in):
@@ -281,6 +281,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
