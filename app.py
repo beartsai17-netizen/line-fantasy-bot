@@ -86,22 +86,28 @@ def load_sheet_commands():
         
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def nba_search_player_official(name):
+def nba_search_player(name):
     try:
-        url = f"https://stats.nba.com/stats/playersearch?LeagueID=00&Season=2024-25&IsOnlyCurrentSeason=1&PlayerName={name}"
-        res = requests.get(url, headers=NBA_HEADERS).json()
+        url = f"{NBA_RELAY_URL}/search?name={name}"
+        data = requests.get(url).json()
 
-        rows = res["resultSets"][0]["rowSet"]
-
+        rows = data["resultSets"][0]["rowSet"]
         if not rows:
             return None
 
-        # row 格式：[PlayerID, PlayerName, TeamID, TeamCity, TeamName]
+        # rowSet Example:
+        # [PLAYER_ID, PLAYER_NAME, TEAM_ID, TEAM_CITY, TEAM_NAME]
+        r = rows[0]
         return {
-            "id": rows[0][0],
-            "name": rows[0][1],
-            "team": rows[0][4],
+            "id": r[0],
+            "name": r[1],
+            "team": r[4]
         }
+
+    except Exception as e:
+        print("NBA search error:", e)
+        return None
+
 
     except Exception as e:
         print("NBA Official Search Error:", e)
@@ -240,6 +246,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
