@@ -2,6 +2,8 @@ import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
+from openai import OpenAI
+
 import os
 
 from flask import Flask, request, abort
@@ -68,6 +70,8 @@ def load_sheet_commands():
     except Exception as e:
         print("Error loading Google Sheet:", e)
         return {}
+        
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # 處理文字訊息事件
 @handler.add(MessageEvent, message=TextMessageContent)
@@ -136,6 +140,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
