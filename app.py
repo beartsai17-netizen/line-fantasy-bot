@@ -95,12 +95,18 @@ def handle_message(event: MessageEvent):
 
     # 第二層：Google Sheet 指令查詢
     else:
-        sheet_commands = load_sheet_commands()  # ← 呼叫 Step 1 建立的函式
+    sheet_commands = load_sheet_commands()
 
-        if command in sheet_commands:
-            reply_text = sheet_commands[command]
-        else:
-            reply_text = f"查無此指令：`{command}`（請到 Google Sheet 新增 keyword）"
+    # 建立「全部小寫」的索引
+    lower_index = {k.lower(): v for k, v in sheet_commands.items()}
+
+    lookup_key = command.lower()  # 使用小寫查詢，但不動中文
+
+    if lookup_key in lower_index:
+        reply_text = lower_index[lookup_key]
+    else:
+        reply_text = f"查無此指令：`{command}`（請到 Google Sheet 新增 keyword）"
+
 
     # 回覆訊息
     with ApiClient(configuration) as api_client:
@@ -115,6 +121,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
