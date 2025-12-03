@@ -4,6 +4,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 from openai import OpenAI
 
+import requests
+
 import os
 
 from flask import Flask, request, abort
@@ -151,6 +153,7 @@ else:
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
