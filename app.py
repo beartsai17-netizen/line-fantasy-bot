@@ -133,7 +133,7 @@ if event.delivery_context.is_redelivery:
     if command == "ff":
         reply_text = f"[Fantasy 指令收到] 參數：{argument}"
 
-    elif command == "nba":
+elif command == "nba":
     if argument == "":
         reply_text = "請輸入球員名稱，例如：!nba SGA"
     else:
@@ -211,6 +211,7 @@ else:
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
