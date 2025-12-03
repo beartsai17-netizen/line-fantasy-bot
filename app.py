@@ -77,6 +77,11 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 def handle_message(event: MessageEvent):
     user_text = event.message.text.strip()
 
+  # 忽略 LINE 自動重送的訊息
+if event.delivery_context.is_redelivery:
+    print("🔁 忽略重送訊息（isRedelivery = true）")
+    return
+  
     # 規則：只有 "!" 開頭才回應
     if not user_text.startswith("!"):
         return
@@ -146,6 +151,7 @@ else:
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
