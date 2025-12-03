@@ -73,7 +73,6 @@ def load_sheet_commands():
         
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# 處理文字訊息事件
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event: MessageEvent):
     user_text = event.message.text.strip()
@@ -84,48 +83,44 @@ def handle_message(event: MessageEvent):
 
     # 拆解使用者訊息
     parts = user_text[1:].split(" ", 1)
-    command = parts[0].lower()             # 第一段（!後面的字）
-    argument = parts[1] if len(parts) > 1 else ""  # 之後的文字
+    command = parts[0].lower()
+    argument = parts[1] if len(parts) > 1 else ""
 
     # 第一層：三大專用指令
     if command == "ff":
         reply_text = f"[Fantasy 指令收到] 參數：{argument}"
-    
+
     elif command == "nba":
         reply_text = f"[NBA 指令收到] 參數：{argument}"
 
     elif command == "bot":
-    if argument == "":
-        reply_text = "請在 !bot 後面輸入你要問的問題喔！"
-    else:
-        # 調用 OpenAI ChatGPT API
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "你是一個友善的聊天助手，回答簡潔、自然、聰明。"},
-                    {"role": "user", "content": argument}
-                ]
-            )
-            reply_text = response.choices[0].message.content
-        except Exception as e:
-            reply_text = f"ChatGPT 發生錯誤：{e}"
-
+        # ChatGPT 分支
+        if argument == "":
+            reply_text = "請在 !bot 後面輸入你要問的問題喔！"
+        else:
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "你是一個友善的聊天助手，回答簡潔、自然、聰明。"},
+                        {"role": "user", "content": argument}
+                    ]
+                )
+                reply_text = response.choices[0].message.content
+            except Exception as e:
+                reply_text = f"ChatGPT 發生錯誤：{e}"
 
     # 第二層：Google Sheet 指令查詢
     else:
-    sheet_commands = load_sheet_commands()
+        sheet_commands = load_sheet_commands()
+        lower_index = {k.lower(): v for k, v in sheet_commands.items()}
 
-    # 建立「全部小寫」的索引
-    lower_index = {k.lower(): v for k, v in sheet_commands.items()}
+        lookup_key = command.lower()
 
-    lookup_key = command.lower()  # 使用小寫查詢，但不動中文
-
-    if lookup_key in lower_index:
-        reply_text = lower_index[lookup_key]
-    else:
-        reply_text = f"查無此指令：`{command}`（請到 Google Sheet 新增 keyword）"
-
+        if lookup_key in lower_index:
+            reply_text = lower_index[lookup_key]
+        else:
+            reply_text = f"查無此指令：`{command}`（請到 Google Sheet 新增 keyword）"
 
     # 回覆訊息
     with ApiClient(configuration) as api_client:
@@ -137,9 +132,11 @@ def handle_message(event: MessageEvent):
             )
         )
 
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
