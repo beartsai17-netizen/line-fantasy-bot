@@ -51,6 +51,23 @@ def callback():
 
     return "OK"
 
+def load_sheet_commands():
+    try:
+        credentials_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
+        credentials = ServiceAccountCredentials.from_json_keyfile_dict(
+            credentials_info,
+            scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        )
+        gc = gspread.authorize(credentials)
+        sheet = gc.open_by_url(os.getenv("GOOGLE_SHEET_URL")).sheet1
+
+        data = sheet.get_all_records()
+        commands = {row["keyword"]: row["response"] for row in data}
+        return commands
+
+    except Exception as e:
+        print("Error loading Google Sheet:", e)
+        return {}
 
 # 處理文字訊息事件
 @handler.add(MessageEvent, message=TextMessageContent)
@@ -93,6 +110,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
