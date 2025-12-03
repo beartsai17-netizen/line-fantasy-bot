@@ -193,12 +193,12 @@ def handle_message(event: MessageEvent):
         if argument == "":
             reply_text = "請輸入球員名稱，例如：!nba SGA"
     else:
-        player = nba_search_player_official(argument)
+        player = nba_search_player(argument)
 
         if player is None:
             reply_text = f"找不到球員：{argument}"
         else:
-            stats = nba_player_latest_game_official(player["id"])
+            stats = nba_latest_game(player["id"])
 
             if stats is None:
                 reply_text = f"{player['name']} 尚無比賽數據"
@@ -213,6 +213,7 @@ def handle_message(event: MessageEvent):
                     f"阻攻：{stats['blk']}\n"
                     f"命中率：{stats['fg_pct'] * 100:.1f}%\n"
                 )
+
 
     # ----------------------
     # (C) ChatGPT（已串接）
@@ -263,6 +264,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
