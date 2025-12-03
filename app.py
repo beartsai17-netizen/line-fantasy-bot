@@ -1,10 +1,14 @@
 import json
+import base64
+import urllib.parse
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import requests
 
+from oauth2client.service_account import ServiceAccountCredentials
 from openai import OpenAI
+
 import os
-from flask import Flask, request, abort
+from flask import Flask, request, abort, jsonify
 from dotenv import load_dotenv
 
 from linebot.v3 import WebhookHandler
@@ -67,30 +71,44 @@ def load_sheet_commands():
         print("❌ Google Sheet 載入失敗:", e)
         return {}
 
-# ---------------------------------------
-# Yahoo Fantasy OAuth Step 2
-# ---------------------------------------
 
-import base64
-import urllib.parse
-
+# ==============================
+# Yahoo Fantasy OAuth 設定
+# ==============================
 YAHOO_CLIENT_ID = "dj0yJmk9OUc2cmtzdEpqbVlUJmQ9WVdrOWFGYzRTREJwVW5vbWNHbzlNQT09JnM9Y29uc3VtZXJzZWNyZXQmc3Y9MCZ4PTAw"
 YAHOO_CLIENT_SECRET = "a1ee51651fa5aa723cd21f0d8160edc90a22997a"
 
-# 你的 Render 網址（請改成你的）
 REDIRECT_URI = "https://line-fantasy-bot.onrender.com/yahoo/callback"
 
 
+# ==============================
+# Yahoo OAuth Step 1：登入入口
+# ==============================
+@app.route("/yahoo/login")
+def yahoo_login():
+    auth_url = (
+        "https://api.login.yahoo.com/oauth2/request_auth?"
+        f"client_id={YAHOO_CLIENT_ID}&"
+        f"redirect_uri={urllib.parse.quote(REDIRECT_URI)}&"
+        "response_type=code&"
+        "language=en-us"
+    )
+    return f"<a href='{auth_url}'>點此登入 Yahoo Fantasy</a>"
+
+
+# ==============================
+# Yahoo OAuth Step 2：Callback 換 Token
+# ==============================
 @app.route("/yahoo/callback")
 def yahoo_callback():
     code = request.args.get("code")
 
     if not code:
-        return "Yahoo 授權失敗：沒有取得 code"
+        return "Yahoo 授權失敗：缺少 code"
 
     token_url = "https://api.login.yahoo.com/oauth2/get_token"
 
-    # Basic Auth 構造方式：base64("client_id:client_secret")
+    # Basic Auth
     auth_str = f"{YAHOO_CLIENT_ID}:{YAHOO_CLIENT_SECRET}"
     basic_auth = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
 
@@ -102,10 +120,9 @@ def yahoo_callback():
     data = {
         "grant_type": "authorization_code",
         "redirect_uri": REDIRECT_URI,
-        "code": code
+        "code": code,
     }
 
-    # ⚠️ Yahoo 要求 data 一定是 form-encoded，而不是 JSON
     response = requests.post(token_url, headers=headers, data=data)
 
     try:
@@ -113,11 +130,9 @@ def yahoo_callback():
     except:
         return f"Token API 回傳非 JSON：{response.text}"
 
-    # 檢查是否有錯誤
     if "error" in result:
         return f"Yahoo Token 換取失敗：{result}"
 
-    # 成功
     return jsonify(result)
 
 
@@ -146,65 +161,53 @@ def callback():
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event: MessageEvent):
 
-    # 忽略 LINE 自動重送
     if event.delivery_context.is_redelivery:
-        print("🔁 忽略重送訊息 (isRedelivery = true)")
+        print("🔁 忽略重送訊息")
         return
 
     user_text = event.message.text.strip()
 
-    # 規則：只有 "!" 開頭才回應
     if not user_text.startswith("!"):
         return
 
-    # 拆解指令（!指令 參數）
     parts = user_text[1:].split(" ", 1)
     command = parts[0].lower()
     argument = parts[1] if len(parts) > 1 else ""
 
-    # ==============================
-    # A. Fantasy (保留空殼)
-    # ==============================
+    # Fantasy
     if command == "ff":
         reply_text = f"[Fantasy 指令收到] 參數：{argument}"
 
-    # ==============================
-    # B. ChatGPT
-    # ==============================
+    # ChatGPT
     elif command == "bot":
         if argument == "":
-            reply_text = "請在 !bot 後加上你要問 ChatGPT 的問題喔！"
+            reply_text = "請在 !bot 後加你要問的內容"
         else:
             try:
-                response = client.chat.completions.create(
+                res = client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": "你是一個友善的聊天助手，回答簡潔自然。"},
                         {"role": "user", "content": argument},
                     ],
                 )
-                reply_text = response.choices[0].message.content
+                reply_text = res.choices[0].message.content
             except Exception as e:
-                reply_text = f"ChatGPT 發生錯誤：{e}"
+                reply_text = f"ChatGPT 錯誤：{e}"
 
-    # ==============================
-    # C. Google Sheet 自訂指令
-    # ==============================
+    # Google Sheet 指令
     else:
-        sheet_commands = load_sheet_commands()
-        lookup = command.lower()
+        sheet_cmds = load_sheet_commands()
+        key = command.lower()
 
-        if lookup in sheet_commands:
-            reply_text = sheet_commands[lookup]
+        if key in sheet_cmds:
+            reply_text = sheet_cmds[key]
         else:
-            reply_text = f"查無此指令：`{command}`（請到 Google Sheet 新增 keyword）"
+            reply_text = f"查無此指令：{command}"
 
-    # ==============================
-    # 回覆使用者
-    # ==============================
+    # 回覆 LINE
     with ApiClient(configuration) as api_client:
-        line_bot_api = MessagingApi(api_client)
-        line_bot_api.reply_message(
+        MessagingApi(api_client).reply_message(
             ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[TextMessage(text=reply_text)],
@@ -213,10 +216,8 @@ def handle_message(event: MessageEvent):
 
 
 # ==============================
-# Render 啟動設定
+# Render 啟動
 # ==============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
-
-
