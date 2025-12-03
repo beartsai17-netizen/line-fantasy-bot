@@ -133,7 +133,15 @@ def yahoo_callback():
     if "error" in result:
         return f"Yahoo Token 換取失敗：{result}"
 
-    return jsonify(result)
+    # 儲存 Yahoo Token 到 Google Sheet
+save_yahoo_token(
+    result["access_token"],
+    result["refresh_token"],
+    result["expires_in"]
+)
+
+return "Yahoo Token 已成功儲存！你可以關閉這個視窗。"
+
 
 def save_yahoo_token(access_token, refresh_token, expires_in):
     try:
@@ -273,4 +281,5 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
