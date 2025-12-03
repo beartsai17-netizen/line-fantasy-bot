@@ -1,8 +1,7 @@
 flask
 line-bot-sdk==3.*
 python-dotenv
+gunicorn
 gspread
 oauth2client
-gunicorn
 openai
-
