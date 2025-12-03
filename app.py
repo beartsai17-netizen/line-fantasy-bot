@@ -165,8 +165,8 @@ def handle_message(event: MessageEvent):
     # (B) NBA（已串接）
     # ----------------------
     elif command == "nba":
-    if argument == "":
-        reply_text = "請輸入球員名稱，例如：!nba SGA"
+        if argument == "":
+            reply_text = "請輸入球員名稱，例如：!nba SGA"
     else:
         player = nba_search_player_official(argument)
 
@@ -238,6 +238,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
