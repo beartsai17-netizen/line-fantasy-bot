@@ -135,6 +135,58 @@ def yahoo_callback():
 
     return jsonify(result)
 
+def save_yahoo_token(access_token, refresh_token, expires_in):
+    try:
+        import datetime
+        expires_at = (datetime.datetime.utcnow() +
+                      datetime.timedelta(seconds=expires_in)).isoformat()
+
+        credentials_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
+        credentials = ServiceAccountCredentials.from_json_keyfile_dict(
+            credentials_info,
+            scopes=[
+                "https://spreadsheets.google.com/feeds",
+                "https://www.googleapis.com/auth/drive",
+            ],
+        )
+
+        gc = gspread.authorize(credentials)
+        sheet = gc.open_by_url(os.getenv("GOOGLE_SHEET_URL"))
+        ws = sheet.worksheet("yahoo_token")
+
+        ws.update("B2", access_token)
+        ws.update("B3", refresh_token)
+        ws.update("B4", expires_at)
+
+        print("✅ Yahoo Token 已成功寫入 Google Sheet")
+
+    except Exception as e:
+        print("❌ Token 寫入失敗：", e)
+
+def load_yahoo_token():
+    try:
+        credentials_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
+        credentials = ServiceAccountCredentials.from_json_keyfile_dict(
+            credentials_info,
+            scopes=[
+                "https://spreadsheets.google.com/feeds",
+                "https://www.googleapis.com/auth/drive",
+            ],
+        )
+
+        gc = gspread.authorize(credentials)
+        sheet = gc.open_by_url(os.getenv("GOOGLE_SHEET_URL"))
+        ws = sheet.worksheet("yahoo_token")
+
+        access_token = ws.acell("B2").value
+        refresh_token = ws.acell("B3").value
+        expires_at = ws.acell("B4").value
+
+        return access_token, refresh_token, expires_at
+
+    except Exception as e:
+        print("❌ Token 載入失敗：", e)
+        return None, None, None
 
 # ==============================
 # LINE Webhook
@@ -221,3 +273,4 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
