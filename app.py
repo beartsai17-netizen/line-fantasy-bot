@@ -93,22 +93,32 @@ def handle_message(event: MessageEvent):
     elif command == "nba":
         reply_text = f"[NBA 指令收到] 參數：{argument}"
 
-    elif command == "bot":
-        # ChatGPT 分支
-        if argument == "":
-            reply_text = "請在 !bot 後面輸入你要問的問題喔！"
-        else:
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "你是一個友善的聊天助手，回答簡潔、自然、聰明。"},
-                        {"role": "user", "content": argument}
-                    ]
-                )
-                reply_text = response.choices[0].message.content
-            except Exception as e:
-                reply_text = f"ChatGPT 發生錯誤：{e}"
+elif command == "bot":
+    if argument == "":
+        reply_text = "請在 !bot 後面輸入你要問的問題喔！"
+    else:
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "你是一個友善的聊天助手，回答簡潔、自然、聰明。"},
+                    {"role": "user", "content": argument}
+                ]
+            )
+            reply_text = response.choices[0].message.content
+        except Exception as e:
+            reply_text = f"ChatGPT 發生錯誤：{e}"
+
+else:
+    sheet_commands = load_sheet_commands()
+    lower_index = {k.lower(): v for k, v in sheet_commands.items()}
+    lookup_key = command.lower()
+
+    if lookup_key in lower_index:
+        reply_text = lower_index[lookup_key]
+    else:
+        reply_text = f"查無此指令：`{command}`（請到 Google Sheet 新增 keyword）"
+
 
     # 第二層：Google Sheet 指令查詢
     else:
@@ -136,6 +146,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
