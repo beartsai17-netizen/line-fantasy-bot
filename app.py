@@ -23,15 +23,6 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
 NBA_RELAY_URL = os.getenv("NBA_RELAY_URL")
 
-NBA_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-                  " AppleWebKit/537.36 (KHTML, like Gecko)"
-                  " Chrome/121.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Origin": "https://www.nba.com",
-    "Referer": "https://www.nba.com/",
-}
-
 # 讀取 .env 檔案
 load_dotenv()
 
@@ -142,6 +133,32 @@ def nba_player_latest_game_official(player_id):
     except Exception as e:
         print("NBA Official Stats Error:", e)
         return None
+        
+def nba_latest_game(player_id):
+    try:
+        url = f"{NBA_RELAY_URL}/latest?player_id={player_id}"
+        data = requests.get(url).json()
+
+        rows = data["resultSets"][0]["rowSet"]
+        if not rows:
+            return None
+
+        g = rows[0]  # 最新一場
+
+        return {
+            "game_date": g[3],
+            "matchup": g[5],
+            "pts": g[26],
+            "reb": g[20],
+            "ast": g[21],
+            "stl": g[22],
+            "blk": g[23],
+            "fg_pct": g[11],
+        }
+
+    except Exception as e:
+        print("NBA latest game error:", e)
+        return None
 
 
 
@@ -246,6 +263,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
