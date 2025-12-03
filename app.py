@@ -75,6 +75,42 @@ def load_sheet_commands():
         
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# ------------------------------
+# NBA API - balldontlie
+# ------------------------------
+def nba_search_player(name):
+    try:
+        url = f"https://api.balldontlie.io/v1/players?search={name}"
+        res = requests.get(url).json()
+
+        if res.get("data") == []:
+            return None
+
+        player = res["data"][0]  # 取第一筆最相關
+        return player
+
+    except Exception as e:
+        print("NBA player search error:", e)
+        return None
+
+
+def nba_get_latest_stats(player_id):
+    try:
+        url = f"https://api.balldontlie.io/v1/stats?player_ids[]={player_id}&per_page=1"
+        res = requests.get(url).json()
+
+        if res.get("data") == []:
+            return None
+
+        game = res["data"][0]
+        stats = game["stats"]
+        return stats
+
+    except Exception as e:
+        print("NBA stats error:", e)
+        return None
+
+
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event: MessageEvent):
     user_text = event.message.text.strip()
@@ -98,7 +134,29 @@ if event.delivery_context.is_redelivery:
         reply_text = f"[Fantasy 指令收到] 參數：{argument}"
 
     elif command == "nba":
-        reply_text = f"[NBA 指令收到] 參數：{argument}"
+    if argument == "":
+        reply_text = "請輸入球員名稱，例如：!nba SGA"
+    else:
+        player = nba_search_player(argument)
+
+        if player is None:
+            reply_text = f"找不到球員：{argument}"
+        else:
+            stats = nba_get_latest_stats(player["id"])
+
+            if stats is None:
+                reply_text = f"{player['first_name']} {player['last_name']} 尚無比賽數據"
+            else:
+                reply_text = (
+                    f"{player['first_name']} {player['last_name']} 最新一場比賽：\n"
+                    f"得分：{stats['pts']}\n"
+                    f"籃板：{stats['reb']}\n"
+                    f"助攻：{stats['ast']}\n"
+                    f"抄截：{stats['stl']}\n"
+                    f"阻攻：{stats['blk']}\n"
+                    f"命中率：{stats['fg_pct'] * 100:.1f}%\n"
+                )
+
 
 elif command == "bot":
     if argument == "":
@@ -153,6 +211,7 @@ else:
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
