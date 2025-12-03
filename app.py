@@ -93,9 +93,14 @@ def handle_message(event: MessageEvent):
     elif command == "bot":
         reply_text = f"[ChatGPT 指令收到] 參數：{argument}"
 
-    # 第二層：fallback → 之後會放 Google Sheet 查詢
+    # 第二層：Google Sheet 指令查詢
     else:
-        reply_text = f"[GoogleSheet 指令] `{command}`（目前先回測試訊息）"
+        sheet_commands = load_sheet_commands()  # ← 呼叫 Step 1 建立的函式
+
+        if command in sheet_commands:
+            reply_text = sheet_commands[command]
+        else:
+            reply_text = f"查無此指令：`{command}`（請到 Google Sheet 新增 keyword）"
 
     # 回覆訊息
     with ApiClient(configuration) as api_client:
@@ -110,6 +115,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
