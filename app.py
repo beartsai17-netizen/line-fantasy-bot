@@ -21,6 +21,15 @@ from linebot.v3.messaging import (
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
+NBA_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                  " AppleWebKit/537.36 (KHTML, like Gecko)"
+                  " Chrome/121.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Origin": "https://www.nba.com",
+    "Referer": "https://www.nba.com/",
+}
+
 # 讀取 .env 檔案
 load_dotenv()
 
@@ -75,40 +84,57 @@ def load_sheet_commands():
         
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ------------------------------
-# NBA API - balldontlie
-# ------------------------------
-def nba_search_player(name):
+def nba_search_player_official(name):
     try:
-        url = f"https://api.balldontlie.io/v1/players?search={name}"
-        res = requests.get(url).json()
+        url = f"https://stats.nba.com/stats/playersearch?LeagueID=00&Season=2024-25&IsOnlyCurrentSeason=1&PlayerName={name}"
+        res = requests.get(url, headers=NBA_HEADERS).json()
 
-        if res.get("data") == []:
+        rows = res["resultSets"][0]["rowSet"]
+
+        if not rows:
             return None
 
-        player = res["data"][0]  # 取第一筆最相關
-        return player
+        # row 格式：[PlayerID, PlayerName, TeamID, TeamCity, TeamName]
+        return {
+            "id": rows[0][0],
+            "name": rows[0][1],
+            "team": rows[0][4],
+        }
 
     except Exception as e:
-        print("NBA player search error:", e)
+        print("NBA Official Search Error:", e)
         return None
-
-
-def nba_get_latest_stats(player_id):
+def nba_player_latest_game_official(player_id):
     try:
-        url = f"https://api.balldontlie.io/v1/stats?player_ids[]={player_id}&per_page=1"
-        res = requests.get(url).json()
+        url = (
+            f"https://stats.nba.com/stats/playergamelog?"
+            f"PlayerID={player_id}&Season=2024-25&SeasonType=Regular%20Season"
+        )
 
-        if res.get("data") == []:
+        res = requests.get(url, headers=NBA_HEADERS).json()
+
+        rows = res["resultSets"][0]["rowSet"]
+
+        if not rows:
             return None
 
-        game = res["data"][0]
-        stats = game["stats"]
-        return stats
+        g = rows[0]  # 最近一場
+
+        return {
+            "matchup": g[5],          # 對手資訊
+            "date": g[3],
+            "pts": g[26],
+            "reb": g[20],
+            "ast": g[21],
+            "stl": g[22],
+            "blk": g[23],
+            "fg_pct": g[11],
+        }
 
     except Exception as e:
-        print("NBA stats error:", e)
+        print("NBA Official Stats Error:", e)
         return None
+
 
 
 @handler.add(MessageEvent, message=TextMessageContent)
@@ -139,30 +165,29 @@ def handle_message(event: MessageEvent):
     # (B) NBA（已串接）
     # ----------------------
     elif command == "nba":
-        if argument == "":
-            reply_text = "請輸入球員名稱，例如：!nba SGA"
+    if argument == "":
+        reply_text = "請輸入球員名稱，例如：!nba SGA"
+    else:
+        player = nba_search_player_official(argument)
+
+        if player is None:
+            reply_text = f"找不到球員：{argument}"
         else:
-            player = nba_search_player(argument)
+            stats = nba_player_latest_game_official(player["id"])
 
-            if player is None:
-                reply_text = f"找不到球員：{argument}"
+            if stats is None:
+                reply_text = f"{player['name']} 尚無比賽數據"
             else:
-                stats = nba_get_latest_stats(player["id"])
-
-                if stats is None:
-                    reply_text = (
-                        f"{player['first_name']} {player['last_name']} 尚無比賽數據"
-                    )
-                else:
-                    reply_text = (
-                        f"{player['first_name']} {player['last_name']} 最新一場比賽：\n"
-                        f"得分：{stats['pts']}\n"
-                        f"籃板：{stats['reb']}\n"
-                        f"助攻：{stats['ast']}\n"
-                        f"抄截：{stats['stl']}\n"
-                        f"阻攻：{stats['blk']}\n"
-                        f"命中率：{stats['fg_pct'] * 100:.1f}%\n"
-                    )
+                reply_text = (
+                    f"{player['name']} 最新一場比賽：\n"
+                    f"對手：{stats['matchup']}\n"
+                    f"得分：{stats['pts']}\n"
+                    f"籃板：{stats['reb']}\n"
+                    f"助攻：{stats['ast']}\n"
+                    f"抄截：{stats['stl']}\n"
+                    f"阻攻：{stats['blk']}\n"
+                    f"命中率：{stats['fg_pct'] * 100:.1f}%\n"
+                )
 
     # ----------------------
     # (C) ChatGPT（已串接）
@@ -213,6 +238,7 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
