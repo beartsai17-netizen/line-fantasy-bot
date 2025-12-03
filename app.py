@@ -67,6 +67,66 @@ def load_sheet_commands():
         print("❌ Google Sheet 載入失敗:", e)
         return {}
 
+# ---------------------------------------
+# Yahoo Fantasy OAuth Step 2
+# ---------------------------------------
+
+import base64
+import urllib.parse
+
+YAHOO_CLIENT_ID = "dj0yJmk9OUc2cmtzdEpqbVlUJmQ9WVdrOWFGYzRTREJwVW5vbWNHbzlNQT09JnM9Y29uc3VtZXJzZWNyZXQmc3Y9MCZ4PTAw"
+YAHOO_CLIENT_SECRET = "a1ee51651fa5aa723cd21f0d8160edc90a22997a"
+
+# 你的 Render 網址（請改成你的）
+REDIRECT_URI = "https://line-fantasy-bot.onrender.com/yahoo/callback"
+
+
+@app.route("/yahoo/login")
+def yahoo_login():
+    auth_url = (
+        "https://api.login.yahoo.com/oauth2/request_auth?"
+        f"client_id={YAHOO_CLIENT_ID}"
+        f"&redirect_uri={urllib.parse.quote(REDIRECT_URI)}"
+        "&response_type=code"
+        "&language=en-us"
+    )
+    return f"<a href='{auth_url}'>點我連接 Yahoo Fantasy 授權</a>"
+
+
+@app.route("/yahoo/callback")
+def yahoo_callback():
+    code = request.args.get("code")
+
+    if not code:
+        return "Yahoo 授權失敗，沒有取得 code"
+
+    # 換取 Access Token
+    token_url = "https://api.login.yahoo.com/oauth2/get_token"
+
+    basic_auth = base64.b64encode(
+        f"{YAHOO_CLIENT_ID}:{YAHOO_CLIENT_SECRET}".encode()
+    ).decode()
+
+    headers = {
+        "Authorization": f"Basic {basic_auth}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+
+    data = {
+        "grant_type": "authorization_code",
+        "redirect_uri": REDIRECT_URI,
+        "code": code
+    }
+
+    token_res = requests.post(token_url, headers=headers, data=data)
+
+    try:
+        token_json = token_res.json()
+    except:
+        return f"Yahoo Token 交換失敗：{token_res.text}"
+
+    # 回傳 token 給你看（之後會改成寫入 Google Sheet）
+    return token_json
 
 # ==============================
 # LINE Webhook
@@ -165,3 +225,4 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
