@@ -449,33 +449,63 @@ def _find_stat_id_for_label(label: str, label_map: dict):
     return None
 
 
-def format_player_stats(stats: dict):
+def format_player_season(stats: dict):
     """
-    將 Yahoo 回傳的 {stat_id: value} 轉成你要的格式：
+    將 Yahoo 回傳的 season stats 轉成場均格式：
     PTS / REB / AST / STL / BLK / FG% / FT% / 3PTM / 3PT% / TO
-    並把累積數據換算成「本季場均」。
     """
+
     label_map = load_stat_label_map()
 
-    # 先找「出賽場數」對應的 stat_id（可能叫 GP、G，或直接是 stat_id=0）
+    # ------------------------
+    # 先處理場次（GP）
+    # ------------------------
     gp = None
-    
-    # 1) league settings 裡找 GP/G
-    for cand in ["GP", "G"]:
-        sid = _find_stat_id_for_label(cand, label_map)
-        if sid and str(sid) in stats:
-            try:
-                gp = float(stats[str(sid)])
-                break
-            except:
-                pass
-    
-    # 2) 如果 league 沒有設定 GP → 使用 stat_id = "0"
-    if gp is None and "0" in stats:
+
+    # stats["0"] 通常就是出賽場數
+    if "0" in stats:
         try:
             gp = float(stats["0"])
         except:
             gp = None
+
+    print("🔎 Games played (from stats['0']):", gp)
+
+    lines = []
+
+    for label in DESIRED_LABELS:
+        stat_id = _find_stat_id_for_label(label, label_map)
+        if not stat_id:
+            continue
+
+        raw_val = stats.get(str(stat_id))
+        if raw_val is None or raw_val == "":
+            continue
+
+        try:
+            v = float(raw_val.replace("%", "")) if isinstance(raw_val, str) else float(raw_val)
+        except:
+            lines.append(f"{label}: {raw_val}")
+            continue
+
+        # 場均數據
+        if label in ["PTS", "REB", "AST", "STL", "BLK", "3PTM", "TO"]:
+            if gp and gp > 0:
+                per_game = v / gp
+                lines.append(f"{label}: {per_game:.1f}")
+            else:
+                lines.append(f"{label}: {v}")
+
+        # 百分比
+        elif label in ["FG%", "FT%", "3PT%"]:
+            if v > 1:
+                v = v / 100
+            lines.append(f"{label}: {v:.3f}")
+
+    if not lines:
+        return "尚無可讀數據"
+
+    return "\n".join(lines)
 
 
 
@@ -656,6 +686,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
