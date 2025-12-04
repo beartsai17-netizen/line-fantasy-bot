@@ -305,19 +305,16 @@ def yahoo_search_player_by_name(name: str):
 
 
 
-def yahoo_get_player_season_stats(player_key: str):
+def yahoo_get_player_season_avg(player_key: str):
     """
-    先取 Yahoo 提供的 player stats（通常是本季平均 or 累積）。
-    回傳一個 dict：{ stat_id: value, ... }
+    抓 Yahoo Fantasy 本季「場均」數據
     """
-    path = f"player/{player_key}/stats"
+    path = f"player/{player_key}/stats;type=season"
     data = yahoo_api_get(path)
     if not data:
         return None
 
     try:
-        # 結構類似：
-        # fantasy_content -> player -> [ {...基本資訊...}, { "player_stats": { "stats": [ { "stat": {...}}, ... ] } } ]
         player_arr = data["fantasy_content"]["player"]
 
         stats_block = None
@@ -342,8 +339,9 @@ def yahoo_get_player_season_stats(player_key: str):
         return stat_map
 
     except Exception as e:
-        print("❌ 解析 Yahoo 玩家 stats 失敗：", e)
+        print("❌ 解析 season avg 失敗：", e)
         return None
+
 
 # Yahoo stat_id → 可讀名稱（僅做參考）
 STAT_MAP = {
@@ -360,59 +358,38 @@ STAT_MAP = {
 }
 
 
-def format_player_stats(stats: dict) -> str:
-    """
-    依照指定順序輸出：
-    PTS / REB / AST / STL / BLK / TO / FG% / FT% / 3PTM / 3PT%
-    並把命中率類型轉成 0.XXX 格式
-    """
+def format_player_season_avg(stats: dict):
+    get = lambda sid: float(stats.get(sid, 0))
 
-    def get(stat_id: str, default="-"):
-        return stats.get(stat_id, default)
+    PTS = get("10")
+    REB = get("13")
+    AST = get("14")
+    STL = get("15")
+    BLK = get("16")
+    TO  = get("17")
 
-    def fmt_pct(raw):
-        """把原始數值轉成 0.XXX 形式，如果本來就是 0.x 就直接格式化"""
-        try:
-            f = float(raw)
-        except (TypeError, ValueError):
-            return str(raw)
+    FG_pct_raw = get("18")
+    FT_pct_raw = get("19")
+    TPM = get("9")
+    TPM_pct_raw = get("20")
 
-        # 如果大於 1，合理推測是百分比（例如 47.1），轉成 0.471
-        if f > 1:
-            f = f / 100.0
-        return f"{f:.3f}"
+    FG_pct = f"{FG_pct_raw/1000:.3f}"
+    FT_pct = f"{FT_pct_raw/1000:.3f}"
+    TPM_pct = f"{TPM_pct_raw/1000:.3f}"
 
-    # 先抓原始值
-    pts   = get("10")
-    reb   = get("13")
-    ast   = get("14")
-    stl   = get("15")
-    blk   = get("16")
-    to    = get("17")
-    fg_pct_raw  = get("18")
-    ft_pct_raw  = get("19")
-    tpm   = get("9")
-    tppct_raw   = get("20")
+    return (
+        f"PTS: {PTS}\n"
+        f"REB: {REB}\n"
+        f"AST: {AST}\n"
+        f"STL: {STL}\n"
+        f"BLK: {BLK}\n"
+        f"TO: {TO}\n"
+        f"FG%: {FG_pct}\n"
+        f"FT%: {FT_pct}\n"
+        f"3PTM: {TPM}\n"
+        f"3PT%: {TPM_pct}"
+    )
 
-    # 命中率轉換成 0.XXX
-    fg_pct = fmt_pct(fg_pct_raw) if fg_pct_raw != "-" else "-"
-    ft_pct = fmt_pct(ft_pct_raw) if ft_pct_raw != "-" else "-"
-    tp_pct = fmt_pct(tppct_raw)  if tppct_raw != "-" else "-"
-
-    lines = [
-        f"PTS: {pts}",
-        f"REB: {reb}",
-        f"AST: {ast}",
-        f"STL: {stl}",
-        f"BLK: {blk}",
-        f"TO: {to}",
-        f"FG%: {fg_pct}",
-        f"FT%: {ft_pct}",
-        f"3PTM: {tpm}",
-        f"3PT%: {tp_pct}",
-    ]
-
-    return "\n".join(lines)
 
 
 def yahoo_get_my_leagues():
@@ -488,24 +465,22 @@ def handle_message(event):
         if not argument:
             reply_text = "請在 !player 後面加球員名字，例如：!player SGA"
         else:
-            if not YAHOO_LEAGUE_KEY:
-                reply_text = "尚未設定 YAHOO_LEAGUE_KEY，請先在環境變數設定。"
+            player = yahoo_search_player_by_name(argument)
+            if not player:
+                reply_text = f"找不到球員：{argument}"
             else:
-                player = yahoo_search_player_by_name(argument)
-                if not player:
-                    reply_text = f"找不到球員：{argument}"
+                stats = yahoo_get_player_season_avg(player["player_key"])
+                if not stats:
+                    reply_text = f"{player['name']} 暫時查不到 stats"
                 else:
-                    stats = yahoo_get_player_season_stats(player["player_key"])
-                    if not stats:
-                        reply_text = f"{player['name']} 暫時查不到 stats"
-                    else:
-                        pretty_stats = format_player_stats(stats)
-                        reply_text = (
-                            f"📊 {player['name']}（{player['team']}）\n"
-                            f"—— 本季數據 ——\n"
-                            f"{pretty_stats}"
-                        )
-                        
+                    pretty_stats = format_player_season_avg(stats)
+                    reply_text = (
+                        f"📊 {player['name']}（{player['team']}）\n"
+                        f"—— 本季場均 ——\n"
+                        f"{pretty_stats}"
+                    )
+    
+                            
     elif command == "leagues":
         leagues = yahoo_get_my_leagues()
         if not leagues:
@@ -551,6 +526,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
