@@ -76,8 +76,7 @@ def load_sheet_commands():
 # ==============================
 # Yahoo Fantasy OAuth 設定
 # ==============================
-YAHOO_CLIENT_ID = "dj0yJmk9OUc2cmtzdEpqbVlUJmQ9WVdrOWFGYzRTREJwVW5vbWNHbzlNQT09JnM9Y29uc3VtZXJzZWNyZXQmc3Y9MCZ4PTAw"
-YAHOO_CLIENT_SECRET = "a1ee51651fa5aa723cd21f0d8160edc90a22997a"
+YAHOO_CLIENT_ID = "dj0yJmk9NVBSdHRVeGVNUkJJJmQ9WVdrOWFXOVdTRnB5UldVbWNHbzlNQT09JnM9Y29uc3VtZXJzZWNyZXQmc3Y9MCZ4PTEy"
 
 REDIRECT_URI = "https://line-fantasy-bot.onrender.com/yahoo/callback"
 
@@ -283,3 +282,4 @@ def handle_message(event: MessageEvent):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
