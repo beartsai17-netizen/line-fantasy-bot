@@ -457,16 +457,26 @@ def format_player_stats(stats: dict):
     """
     label_map = load_stat_label_map()
 
-    # 先找「出賽場數」對應的 stat_id（可能叫 GP 或 G）
+    # 先找「出賽場數」對應的 stat_id（可能叫 GP、G，或直接是 stat_id=0）
     gp = None
+    
+    # 1) league settings 裡找 GP/G
     for cand in ["GP", "G"]:
-        sid = _find_stat_id_for_label(cand, label_map) if cand not in label_map else label_map[cand]
-        if sid and sid in stats:
+        sid = _find_stat_id_for_label(cand, label_map)
+        if sid and str(sid) in stats:
             try:
-                gp = float(stats[sid])
-            except Exception:
-                gp = None
-            break
+                gp = float(stats[str(sid)])
+                break
+            except:
+                pass
+
+# 2) 如果 league 沒有設定 GP → 使用 stat_id = "0"
+if gp is None and "0" in stats:
+    try:
+        gp = float(stats["0"])
+    except:
+        gp = None
+
 
     # DEBUG：你也可以暫時印出看看原始 stats & label_map
     print("🔎 Raw stats:", stats)
@@ -645,6 +655,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
