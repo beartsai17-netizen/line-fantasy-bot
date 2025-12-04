@@ -345,6 +345,35 @@ def yahoo_get_player_season_stats(player_key: str):
         print("❌ 解析 Yahoo 玩家 stats 失敗：", e)
         return None
 
+# Yahoo stat_id → 可讀名稱
+STAT_MAP = {
+    "9004003": "GP",
+    "5": "FGM",
+    "6": "FGA",
+    "9": "3PTM",
+    "10": "PTS",
+    "11": "OREB",
+    "12": "DREB",
+    "13": "REB",
+    "14": "AST",
+    "15": "STL",
+    "16": "BLK",
+    "17": "TO",
+    "18": "FG%",
+    "19": "FT%",
+    "20": "3PT%",
+}
+
+def format_player_stats(stats: dict):
+    """將 stat_id dict 轉成可讀文字"""
+    lines = []
+    for stat_id, value in stats.items():
+        label = STAT_MAP.get(stat_id)
+        if label:
+            lines.append(f"{label}: {value}")
+    return "\n".join(lines) if lines else "尚無可讀數據"
+
+
 
 # ==============================
 # LINE Webhook
@@ -403,13 +432,11 @@ def handle_message(event):
                     if not stats:
                         reply_text = f"{player['name']} 暫時查不到 stats"
                     else:
-                        sample_items = list(stats.items())[:8]
-                        stats_lines = "\n".join(
-                            [f"stat_id {k}: {v}" for k, v in sample_items]
-                        )
+                        pretty_stats = format_player_stats(stats)
                         reply_text = (
-                            f"{player['name']}（{player['team']}）本季部分數據：\n"
-                            f"{stats_lines}"
+                            f"📊 {player['name']}（{player['team']}）\n"
+                            f"—— 本季數據 ——\n"
+                            f"{pretty_stats}"
                         )
 
  
@@ -450,6 +477,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
