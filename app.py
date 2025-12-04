@@ -342,6 +342,58 @@ def yahoo_get_player_season_avg(player_key: str):
         print("❌ 解析 season avg 失敗：", e)
         return None
 
+def yahoo_get_player_stats_by_date_range(player_key: str, days: int = 7):
+    """
+    抓某球員「最近 N 天」的數據（逐日 stats → 累積 → 回傳 stat_id -> total_value）
+    """
+    all_stats = {}  # stat_id 累積值
+
+    today = datetime.date.today()
+
+    for d in range(days):
+        date = today - datetime.timedelta(days=d)
+        date_str = date.strftime("%Y-%m-%d")
+
+        path = f"player/{player_key}/stats;type=date;date={date_str}"
+        data = yahoo_api_get(path)
+
+        if not data:
+            continue
+
+        try:
+            player_arr = data["fantasy_content"]["player"]
+
+            stats_block = None
+            for part in player_arr:
+                if isinstance(part, dict) and "player_stats" in part:
+                    stats_block = part["player_stats"]
+                    break
+
+            if not stats_block:
+                continue
+
+            stats_list = stats_block["stats"]
+
+            for s in stats_list:
+                stat = s.get("stat", {})
+                stat_id = stat.get("stat_id")
+                value = stat.get("value")
+
+                if stat_id is None or value in [None, "", "-"]:
+                    continue
+
+                try:
+                    v = float(value)
+                except:
+                    continue
+
+                all_stats[stat_id] = all_stats.get(stat_id, 0) + v
+
+        except Exception as e:
+            print("❌ 日期 stats 解析失敗：", e)
+            continue
+
+    return all_stats
 
 # ==============================
 # 動態讀取聯盟 stat 設定 & 格式化球員數據
@@ -507,6 +559,24 @@ def format_player_stats(stats: dict):
 
     return "\n".join(lines)
 
+def format_player_recent_avg(stats: dict, days: int):
+    """
+    把最近 N 天累積 stats → 換算成「場均」
+    """
+    if not stats:
+        return "最近沒有比賽數據"
+
+    # 先用季 stats 的 formatter（它會處理 FG%、FT% 等百分比）
+    # 但需要告知 formatter：這不是累積而是要除以天數
+    per_game_stats = {}
+
+    for stat_id, total in stats.items():
+        try:
+            per_game_stats[stat_id] = float(total) / days
+        except:
+            per_game_stats[stat_id] = total
+
+    return format_player_stats(per_game_stats)
 
 
     # DEBUG：你也可以暫時印出看看原始 stats & label_map
@@ -638,6 +708,22 @@ def handle_message(event):
                         f"—— 本季場均 ——\n"
                         f"{pretty_stats}"
                     )
+                    
+    elif command == "player_week":
+        if not argument:
+            reply_text = "請在 !player_week 後面加球員名字，例如：!player_week curry"
+        else:
+            player = yahoo_search_player_by_name(argument)
+            if not player:
+                reply_text = f"找不到球員：{argument}"
+            else:
+                stats7 = yahoo_get_player_stats_by_date_range(player["player_key"], days=7)
+                pretty = format_player_recent_avg(stats7, 7)
+                reply_text = (
+                    f"📆 {player['name']}（{player['team']}）\n"
+                    f"—— 最近 7 天場均 ——\n"
+                    f"{pretty}"
+                )
 
     
                             
@@ -686,6 +772,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
