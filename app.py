@@ -388,7 +388,7 @@ def handle_message(event):
         token = refresh_yahoo_token_if_needed()
         reply_text = f"目前 Token：{token[:20]}..."
 
-     elif command == "player":
+    elif command == "player":
         if not argument:
             reply_text = "請在 !player 後面加球員名字，例如：!player SGA"
         else:
@@ -401,18 +401,17 @@ def handle_message(event):
                 else:
                     stats = yahoo_get_player_season_stats(player["player_key"])
                     if not stats:
-                        reply_text = f"{player['name']} 暫時查不到 stats（請先看 Render log 的 Yahoo 回傳 JSON）"
+                        reply_text = f"{player['name']} 暫時查不到 stats"
                     else:
-                        # 先把前幾個 stat_id:value 顯示出來，之後再 mapping 成 PTS / REB / AST...
                         sample_items = list(stats.items())[:8]
                         stats_lines = "\n".join(
                             [f"stat_id {k}: {v}" for k, v in sample_items]
                         )
                         reply_text = (
                             f"{player['name']}（{player['team']}）本季部分數據：\n"
-                            f"{stats_lines}\n\n"
-                            f"(之後我們可以把 stat_id 對應成 PTS / REB / AST 等人類看得懂的格式)"
+                            f"{stats_lines}"
                         )
+
  
     # ChatGPT
     elif command == "bot":
@@ -451,5 +450,6 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
