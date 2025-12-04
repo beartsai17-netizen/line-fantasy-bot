@@ -578,10 +578,6 @@ def handle_message(event):
     if command == "ff":
         reply_text = f"[Fantasy 指令收到] 參數：{argument}"
 
-    elif command == "token":
-        token = refresh_yahoo_token_if_needed()
-        reply_text = f"目前 Token：{token[:20]}..."
-
     elif command == "player":
         if not argument:
             reply_text = "請在 !player 後面加球員名字，例如：!player SGA"
@@ -594,12 +590,14 @@ def handle_message(event):
                 if not stats:
                     reply_text = f"{player['name']} 暫時查不到 stats"
                 else:
-                    pretty_stats = format_player_season(stats)
+                    # ✅ 這裡改成呼叫 format_player_stats
+                    pretty_stats = format_player_stats(stats)
                     reply_text = (
                         f"📊 {player['name']}（{player['team']}）\n"
                         f"—— 本季場均 ——\n"
                         f"{pretty_stats}"
                     )
+
     
                             
     elif command == "leagues":
@@ -647,6 +645,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
