@@ -373,6 +373,31 @@ def format_player_stats(stats: dict):
             lines.append(f"{label}: {value}")
     return "\n".join(lines) if lines else "尚無可讀數據"
 
+def yahoo_get_my_leagues():
+    data = yahoo_api_get("users;use_login=1/games;game_keys=nba/leagues")
+
+    if not data:
+        return None
+
+    try:
+        users = data["fantasy_content"]["users"]
+        user0 = users["0"]["user"][1]
+        games = user0["games"]
+
+        league_keys = []
+
+        for i in range(int(games["count"])):
+            leagues = games[str(i)]["game"][1]["leagues"]
+            for j in range(int(leagues["count"])):
+                league_key = leagues[str(j)]["league"][0]["league_key"]
+                league_keys.append(league_key)
+
+        return league_keys
+
+    except Exception as e:
+        print("解析 league 列表失敗：", e)
+        return None
+
 
 
 # ==============================
@@ -438,6 +463,13 @@ def handle_message(event):
                             f"—— 本季數據 ——\n"
                             f"{pretty_stats}"
                         )
+                        
+    elif command == "leagues":
+        leagues = yahoo_get_my_leagues()
+        if not leagues:
+            reply_text = "無法取得 league 列表，請先確認 token 是否授權"
+        else:
+            reply_text = "你的 Yahoo Fantasy League Keys：\n" + "\n".join(leagues)
 
  
     # ChatGPT
@@ -477,6 +509,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
