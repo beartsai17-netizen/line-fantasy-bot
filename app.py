@@ -364,14 +364,39 @@ STAT_MAP = {
     "20": "3PT%",
 }
 
-def format_player_stats(stats: dict):
-    """將 stat_id dict 轉成可讀文字"""
-    lines = []
-    for stat_id, value in stats.items():
-        label = STAT_MAP.get(stat_id)
-        if label:
-            lines.append(f"{label}: {value}")
-    return "\n".join(lines) if lines else "尚無可讀數據"
+def format_player_stats_pretty(stats: dict):
+    """
+    將 Yahoo stat_id dict → 排序後的可讀格式
+    並依指定格式顯示 0.xxx 命中率
+    """
+
+    # 取值，如果沒有就顯示 "-"
+    def get(sid):
+        return stats.get(sid, "-")
+
+    # 轉成 0.xxx 格式
+    def pct(v):
+        try:
+            return f"{float(v):.3f}"
+        except:
+            return "-"
+
+    # 依你指定的順序輸出
+    lines = [
+        f"PTS: {get('10')}",
+        f"REB: {get('13')}",
+        f"AST: {get('14')}",
+        f"STL: {get('15')}",
+        f"BLK: {get('16')}",
+        f"TO: {get('17')}",
+        f"FG%: {pct(get('18'))}",
+        f"FT%: {pct(get('19'))}",
+        f"3PTM: {get('9')}",
+        f"3PT%: {pct(get('20'))}",
+    ]
+
+    return "\n".join(lines)
+
 
 def yahoo_get_my_leagues():
     data = yahoo_api_get("users;use_login=1/games;game_keys=nba/leagues")
@@ -509,6 +534,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
