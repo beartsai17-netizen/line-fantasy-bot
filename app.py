@@ -845,27 +845,27 @@ def handle_message(event):
                 )
     
     elif command == "player_update":
-    if not argument:
-        reply_text = "請在 !player_update 後加球員名字"
-    else:
-        player = yahoo_search_player_by_name(argument)
-        if not player:
-            reply_text = f"找不到球員：{argument}"
+        if not argument:
+            reply_text = "請在 !player_update 後加球員名字"
         else:
-            detail = yahoo_get_player_detail(player["player_key"])
-            if not detail:
-                reply_text = "查詢失敗"
+            player = yahoo_search_player_by_name(argument)
+            if not player:
+                reply_text = f"找不到球員：{argument}"
             else:
-                status = detail.get("status")
-                note = detail.get("injury")
-                if not note:
-                    reply_text = f"{player['name']} 目前無傷病資訊"
+                detail = yahoo_get_player_detail(player["player_key"])
+                if not detail:
+                    reply_text = "查詢失敗"
                 else:
-                    reply_text = (
-                        f"🩺 {player['name']}（{player['team']}）\n"
-                        f"狀態：{status}\n"
-                        f"傷病：{note}"
-                    )
+                    status = detail.get("status")
+                    note = detail.get("injury")
+                    if not note:
+                        reply_text = f"{player['name']} 目前無傷病資訊"
+                    else:
+                        reply_text = (
+                            f"🩺 {player['name']}（{player['team']}）\n"
+                            f"狀態：{status}\n"
+                            f"傷病：{note}"
+                        )
 
                             
     elif command == "leagues":
@@ -913,6 +913,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
