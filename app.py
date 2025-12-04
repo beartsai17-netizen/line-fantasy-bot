@@ -947,7 +947,7 @@ def handle_message(event):
         else:
             try:
                 res = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4.1",
                     messages=[
                         {"role": "system", "content": "你是一個友善的聊天助手。"},
                         {"role": "user", "content": argument},
@@ -977,6 +977,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
