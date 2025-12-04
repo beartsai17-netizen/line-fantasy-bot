@@ -696,6 +696,47 @@ def yahoo_get_my_leagues():
         print("解析 league 列表失敗：", e)
         return None
 
+def compare_two_players(nameA: str, nameB: str):
+    # 找球員
+    pA = yahoo_search_player_by_name(nameA)
+    pB = yahoo_search_player_by_name(nameB)
+
+    if not pA or not pB:
+        return "找不到其中一位球員，請確認名字"
+
+    # 抓 7 天 stats
+    statsA = yahoo_get_player_stats_by_date_range(pA["player_key"], days=7)
+    statsB = yahoo_get_player_stats_by_date_range(pB["player_key"], days=7)
+
+    # 格式化並列
+    label_map = load_stat_label_map()
+
+    lines = []
+    lines.append(f"📊 {pA['name']} vs {pB['name']} — 最近 7 天場均\n")
+
+    for label in DESIRED_LABELS:
+        sid = _find_stat_id_for_label(label, label_map)
+        if not sid:
+            continue
+
+        vA = statsA.get(sid, 0)
+        vB = statsB.get(sid, 0)
+
+        # 計數型
+        if label in ["PTS", "REB", "AST", "STL", "BLK", "3PTM", "TO"]:
+            line = f"{label:<4} {vA:.1f} vs {vB:.1f}"
+
+        # 百分比
+        else:
+            # 若大於 1 的話轉回 0.xxx
+            if vA > 1: vA /= 100
+            if vB > 1: vB /= 100
+            line = f"{label:<4} {vA:.3f} vs {vB:.3f}"
+
+        lines.append(line)
+
+    return "\n".join(lines)
+
 
 def format_player_update(name, team, update):
     if not update:
@@ -865,6 +906,13 @@ def handle_message(event):
                     f"{pretty_stats}"
                 )
 
+    elif command == "compare":
+        try:
+            nameA, nameB = argument.split(" ", 1)
+        except:
+            reply_text = "用法：!compare Curry Lillard"
+        else:
+            reply_text = compare_two_players(nameA, nameB)
 
     
     elif command == "player_update":
@@ -891,13 +939,6 @@ def handle_message(event):
                         )
 
                             
-    elif command == "leagues":
-        leagues = yahoo_get_my_leagues()
-        if not leagues:
-            reply_text = "無法取得 league 列表，請先確認 token 是否授權"
-        else:
-            reply_text = "你的 Yahoo Fantasy League Keys：\n" + "\n".join(leagues)
-
  
     # ChatGPT
     elif command == "bot":
@@ -936,6 +977,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
