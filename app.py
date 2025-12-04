@@ -3,6 +3,7 @@ import base64
 import urllib.parse
 import gspread
 import requests
+import datetime
 
 from oauth2client.service_account import ServiceAccountCredentials
 from openai import OpenAI
@@ -23,7 +24,7 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
 
 # ==============================
-# 讀取 .env
+# Load .env
 # ==============================
 load_dotenv()
 
@@ -32,15 +33,11 @@ CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 
 if not CHANNEL_SECRET or not CHANNEL_ACCESS_TOKEN:
-    raise Exception("請在 .env 設定 LINE_CHANNEL_SECRET、LINE_CHANNEL_ACCESS_TOKEN")
+    raise Exception("缺少 LINE_CHANNEL_SECRET or LINE_CHANNEL_ACCESS_TOKEN")
 
 if not OPENAI_KEY:
-    raise Exception("請在 .env 設定 OPENAI_API_KEY")
+    raise Exception("缺少 OPENAI_API_KEY")
 
-
-# ==============================
-# 基礎設定
-# ==============================
 app = Flask(__name__)
 configuration = Configuration(access_token=CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(CHANNEL_SECRET)
@@ -48,42 +45,41 @@ client = OpenAI(api_key=OPENAI_KEY)
 
 
 # ==============================
-# Google Sheet 指令載入
+# Google Sheet Utils
 # ==============================
+def get_gsheet():
+    credentials_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
+    credentials = ServiceAccountCredentials.from_json_keyfile_dict(
+        credentials_info,
+        scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ],
+    )
+    gc = gspread.authorize(credentials)
+    return gc.open_by_url(os.getenv("GOOGLE_SHEET_URL"))
+
+
 def load_sheet_commands():
     try:
-        credentials_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
-        credentials = ServiceAccountCredentials.from_json_keyfile_dict(
-            credentials_info,
-            scopes=[
-                "https://spreadsheets.google.com/feeds",
-                "https://www.googleapis.com/auth/drive",
-            ],
-        )
-
-        gc = gspread.authorize(credentials)
-        sheet = gc.open_by_url(os.getenv("GOOGLE_SHEET_URL")).sheet1
-
-        data = sheet.get_all_records()
-        return {row["keyword"].lower(): row["response"] for row in data}
-
+        sheet = get_gsheet().worksheet("keyword_reply")
+        rows = sheet.get_all_records()
+        return {row["keyword"].lower(): row["response"] for row in rows}
     except Exception as e:
         print("❌ Google Sheet 載入失敗:", e)
         return {}
 
 
-
 # ==============================
-# Yahoo Fantasy OAuth 設定
+# Yahoo Fantasy OAuth
 # ==============================
-YAHOO_CLIENT_ID = "dj0yJmk9NVBSdHRVeGVNUkJJJmQ9WVdrOWFXOVdTRnB5UldVbWNHbzlNQT09JnM9Y29uc3VtZXJzZWNyZXQmc3Y9MCZ4PTEy"
+YAHOO_CLIENT_ID = os.getenv("YAHOO_CLIENT_ID")
+YAHOO_CLIENT_SECRET = os.getenv("YAHOO_CLIENT_SECRET")
 
 REDIRECT_URI = "https://line-fantasy-bot.onrender.com/yahoo/callback"
 
 
-# ==============================
-# Yahoo OAuth Step 1：登入入口
-# ==============================
+# Yahoo Step 1：Login URL
 @app.route("/yahoo/login")
 def yahoo_login():
     auth_url = (
@@ -96,21 +92,18 @@ def yahoo_login():
     return f"<a href='{auth_url}'>點此登入 Yahoo Fantasy</a>"
 
 
-# ==============================
-# Yahoo OAuth Step 2：Callback 換 Token
-# ==============================
+# Yahoo Step 2：Callback -> Exchange Token
 @app.route("/yahoo/callback")
 def yahoo_callback():
     code = request.args.get("code")
-
     if not code:
-        return "Yahoo 授權失敗：缺少 code"
+        return "❌ 授權失敗：缺少 code"
 
     token_url = "https://api.login.yahoo.com/oauth2/get_token"
 
-    # Basic Auth
+    # Basic Authentication
     auth_str = f"{YAHOO_CLIENT_ID}:{YAHOO_CLIENT_SECRET}"
-    basic_auth = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
+    basic_auth = base64.b64encode(auth_str.encode()).decode()
 
     headers = {
         "Authorization": f"Basic {basic_auth}",
@@ -124,77 +117,102 @@ def yahoo_callback():
     }
 
     response = requests.post(token_url, headers=headers, data=data)
-
     try:
         result = response.json()
     except:
-        return f"Token API 回傳非 JSON：{response.text}"
+        return f"❌ Token API 回傳非 JSON：{response.text}"
 
     if "error" in result:
-        return f"Yahoo Token 換取失敗：{result}"
+        return f"❌ Token 換取失敗：{result}"
 
-    # 儲存 Yahoo Token 到 Google Sheet
-save_yahoo_token(
-    result["access_token"],
-    result["refresh_token"],
-    result["expires_in"]
-)
+    save_yahoo_token(
+        result["access_token"],
+        result["refresh_token"],
+        result["expires_in"]
+    )
 
-return "Yahoo Token 已成功儲存！你可以關閉這個視窗。"
+    return "Yahoo Token 已成功儲存！你可以關閉這個視窗。"
 
 
+# ==============================
+# Token Storage
+# ==============================
 def save_yahoo_token(access_token, refresh_token, expires_in):
     try:
-        import datetime
         expires_at = (datetime.datetime.utcnow() +
                       datetime.timedelta(seconds=expires_in)).isoformat()
 
-        credentials_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
-        credentials = ServiceAccountCredentials.from_json_keyfile_dict(
-            credentials_info,
-            scopes=[
-                "https://spreadsheets.google.com/feeds",
-                "https://www.googleapis.com/auth/drive",
-            ],
-        )
+        ws = get_gsheet().worksheet("yahoo_token")
 
-        gc = gspread.authorize(credentials)
-        sheet = gc.open_by_url(os.getenv("GOOGLE_SHEET_URL"))
-        ws = sheet.worksheet("yahoo_token")
+        # MUST use 2D array format
+        ws.update("B2", [[access_token]])
+        ws.update("B3", [[refresh_token]])
+        ws.update("B4", [[expires_at]])
 
-        ws.update("B2", access_token)
-        ws.update("B3", refresh_token)
-        ws.update("B4", expires_at)
-
-        print("✅ Yahoo Token 已成功寫入 Google Sheet")
+        print("✅ Token 寫入成功")
 
     except Exception as e:
         print("❌ Token 寫入失敗：", e)
 
+
 def load_yahoo_token():
     try:
-        credentials_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
-        credentials = ServiceAccountCredentials.from_json_keyfile_dict(
-            credentials_info,
-            scopes=[
-                "https://spreadsheets.google.com/feeds",
-                "https://www.googleapis.com/auth/drive",
-            ],
-        )
-
-        gc = gspread.authorize(credentials)
-        sheet = gc.open_by_url(os.getenv("GOOGLE_SHEET_URL"))
-        ws = sheet.worksheet("yahoo_token")
-
+        ws = get_gsheet().worksheet("yahoo_token")
         access_token = ws.acell("B2").value
         refresh_token = ws.acell("B3").value
         expires_at = ws.acell("B4").value
-
         return access_token, refresh_token, expires_at
-
     except Exception as e:
-        print("❌ Token 載入失敗：", e)
+        print("❌ Token 讀取失敗：", e)
         return None, None, None
+
+
+# ==============================
+# Auto Refresh Yahoo Token
+# ==============================
+def refresh_yahoo_token_if_needed():
+    access_token, refresh_token, expires_at = load_yahoo_token()
+
+    if not access_token or not refresh_token or not expires_at:
+        return access_token  # token 不存在，返回 None
+
+    expires_at_dt = datetime.datetime.fromisoformat(expires_at)
+    now = datetime.datetime.utcnow()
+
+    # 若 token 已過期 60 秒前，就 refresh
+    if now > expires_at_dt - datetime.timedelta(seconds=60):
+        print("🔄 Token 已過期，開始 refresh...")
+
+        token_url = "https://api.login.yahoo.com/oauth2/get_token"
+
+        auth_str = f"{YAHOO_CLIENT_ID}:{YAHOO_CLIENT_SECRET}"
+        basic_auth = base64.b64encode(auth_str.encode()).decode()
+
+        headers = {
+            "Authorization": f"Basic {basic_auth}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+
+        data = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "redirect_uri": REDIRECT_URI,
+        }
+
+        res = requests.post(token_url, headers=headers, data=data)
+        result = res.json()
+
+        if "access_token" in result:
+            save_yahoo_token(
+                result["access_token"],
+                result.get("refresh_token", refresh_token),
+                result["expires_in"]
+            )
+            return result["access_token"]
+
+        print("❌ Refresh Token 失敗：", result)
+
+    return access_token
 
 
 # ==============================
@@ -204,23 +222,19 @@ def load_yahoo_token():
 def callback():
     signature = request.headers.get("X-Line-Signature", "")
     body = request.get_data(as_text=True)
-
-    print("🔵 Request body:", body)
-
     try:
         handler.handle(body, signature)
     except Exception as e:
-        print("❌ Handler Error:", e)
+        print("❌ Webhook Error:", e)
         abort(400)
-
     return "OK"
 
 
 # ==============================
-# 處理文字訊息
+# LINE Message Handler
 # ==============================
 @handler.add(MessageEvent, message=TextMessageContent)
-def handle_message(event: MessageEvent):
+def handle_message(event):
 
     if event.delivery_context.is_redelivery:
         print("🔁 忽略重送訊息")
@@ -235,20 +249,24 @@ def handle_message(event: MessageEvent):
     command = parts[0].lower()
     argument = parts[1] if len(parts) > 1 else ""
 
-    # Fantasy
+    # Fantasy Module
     if command == "ff":
         reply_text = f"[Fantasy 指令收到] 參數：{argument}"
 
+    elif command == "token":
+        token = refresh_yahoo_token_if_needed()
+        reply_text = f"目前 Token：{token[:20]}..."
+
     # ChatGPT
     elif command == "bot":
-        if argument == "":
-            reply_text = "請在 !bot 後加你要問的內容"
+        if not argument:
+            reply_text = "請輸入問題"
         else:
             try:
                 res = client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[
-                        {"role": "system", "content": "你是一個友善的聊天助手，回答簡潔自然。"},
+                        {"role": "system", "content": "你是一個友善的聊天助手。"},
                         {"role": "user", "content": argument},
                     ],
                 )
@@ -256,17 +274,11 @@ def handle_message(event: MessageEvent):
             except Exception as e:
                 reply_text = f"ChatGPT 錯誤：{e}"
 
-    # Google Sheet 指令
     else:
-        sheet_cmds = load_sheet_commands()
-        key = command.lower()
+        cmds = load_sheet_commands()
+        reply_text = cmds.get(command, f"查無指令：{command}")
 
-        if key in sheet_cmds:
-            reply_text = sheet_cmds[key]
-        else:
-            reply_text = f"查無此指令：{command}"
-
-    # 回覆 LINE
+    # Reply Message
     with ApiClient(configuration) as api_client:
         MessagingApi(api_client).reply_message(
             ReplyMessageRequest(
@@ -277,9 +289,8 @@ def handle_message(event: MessageEvent):
 
 
 # ==============================
-# Render 啟動
+# Start Server
 # ==============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
-
