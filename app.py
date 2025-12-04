@@ -714,6 +714,45 @@ def format_player_update(name, team, update):
         msg += "\n沒有最新球員新聞。"
 
     return msg
+    
+def yahoo_get_player_detail(player_key):
+    """
+    取得玩家完整資訊（包含傷病與狀態）
+    Yahoo API: player/{player_key}
+    """
+    path = f"player/{player_key}"
+    data = yahoo_api_get(path)
+    if not data:
+        return None
+
+    try:
+        player_arr = data["fantasy_content"]["player"]
+
+        status = None
+        injury_note = None
+
+        # 玩家 metadata 都在 player_arr[0] 裡
+        for block in player_arr[0]:
+            if not isinstance(block, dict):
+                continue
+
+            # 受傷狀態 (INJ, OUT)
+            if "status" in block:
+                status = block["status"]
+
+            # 傷病內容
+            if "injury_note" in block:
+                injury_note = block["injury_note"]
+
+        return {
+            "status": status,
+            "injury": injury_note,
+        }
+
+    except Exception as e:
+        print("❌ 解析玩家傷情失敗：", e)
+        return None
+
 
 # ==============================
 # LINE Webhook
@@ -806,15 +845,28 @@ def handle_message(event):
                 )
     
     elif command == "player_update":
-        if not argument:
-            reply_text = "請在 !player_update 後加球員名字，例如：!player_update curry"
+    if not argument:
+        reply_text = "請在 !player_update 後加球員名字"
+    else:
+        player = yahoo_search_player_by_name(argument)
+        if not player:
+            reply_text = f"找不到球員：{argument}"
         else:
-            player = yahoo_search_player_by_name(argument)
-            if not player:
-                reply_text = f"找不到球員：{argument}"
+            detail = yahoo_get_player_detail(player["player_key"])
+            if not detail:
+                reply_text = "查詢失敗"
             else:
-                update = yahoo_get_player_update(player["player_key"])
-                reply_text = format_player_update(player["name"], player["team"], update)
+                status = detail.get("status")
+                note = detail.get("injury")
+                if not note:
+                    reply_text = f"{player['name']} 目前無傷病資訊"
+                else:
+                    reply_text = (
+                        f"🩺 {player['name']}（{player['team']}）\n"
+                        f"狀態：{status}\n"
+                        f"傷病：{note}"
+                    )
+
                             
     elif command == "leagues":
         leagues = yahoo_get_my_leagues()
@@ -861,6 +913,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
