@@ -395,6 +395,48 @@ def yahoo_get_player_stats_by_date_range(player_key: str, days: int = 7):
 
     return all_stats
 
+def yahoo_get_player_update(player_key: str):
+    """取得球員最新傷情 + Notes"""
+    data = yahoo_api_get(f"player/{player_key}/notes")
+    if not data:
+        return None
+
+    try:
+        player = data["fantasy_content"]["player"]
+
+        status = None
+        injury = None
+        notes = None
+
+        # 尋找球員基本狀態（status, injury_note）
+        for part in player:
+            if isinstance(part, dict):
+                if "status" in part:
+                    status = part["status"]
+                if "injury_note" in part:
+                    injury = part["injury_note"]
+
+        # 尋找 notes
+        if "notes" in player[1]:
+            notes_block = player[1]["notes"]
+            if notes_block.get("count") != "0":
+                first_note = notes_block["0"]["note"]
+                notes = {
+                    "title": first_note.get("title"),
+                    "content": first_note.get("note"),
+                    "timestamp": first_note.get("timestamp"),
+                }
+
+        return {
+            "status": status,
+            "injury": injury,
+            "notes": notes,
+        }
+
+    except Exception as e:
+        print("❌ 解析 player update 失敗：", e)
+        return None
+
 # ==============================
 # 動態讀取聯盟 stat 設定 & 格式化球員數據
 # ==============================
@@ -650,6 +692,28 @@ def yahoo_get_my_leagues():
         return None
 
 
+def format_player_update(name, team, update):
+    if not update:
+        return f"{name}（{team}）目前沒有相關傷情資訊。"
+
+    status = update.get("status") or "無資料"
+    injury = update.get("injury") or "—"
+    notes = update.get("notes")
+
+    msg = f"🩺 {name}（{team}）\n"
+    msg += f"狀態：{status}\n"
+    msg += f"傷勢：{injury}\n"
+
+    if notes:
+        ts = notes.get("timestamp")
+        if ts:
+            dt = datetime.datetime.fromtimestamp(int(ts))
+            msg += f"更新時間：{dt.strftime('%Y-%m-%d %H:%M')}\n"
+        msg += f"\n📘 最新消息：\n{notes.get('content')}"
+    else:
+        msg += "\n沒有最新球員新聞。"
+
+    return msg
 
 # ==============================
 # LINE Webhook
@@ -741,6 +805,16 @@ def handle_message(event):
                     f"{pretty}"
                 )
     
+    elif command == "player_update":
+        if not argument:
+            reply_text = "請在 !player_update 後加球員名字，例如：!player_update curry"
+        else:
+            player = yahoo_search_player_by_name(argument)
+            if not player:
+                reply_text = f"找不到球員：{argument}"
+            else:
+                update = yahoo_get_player_update(player["player_key"])
+                reply_text = format_player_update(player["name"], player["team"], update)
                             
     elif command == "leagues":
         leagues = yahoo_get_my_leagues()
@@ -787,6 +861,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
