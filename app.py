@@ -449,7 +449,7 @@ def _find_stat_id_for_label(label: str, label_map: dict):
     return None
 
 
-def format_player_season(stats: dict):
+def format_player_stats(stats: dict):
     """
     將 Yahoo 回傳的 season stats 轉成場均格式：
     PTS / REB / AST / STL / BLK / FG% / FT% / 3PTM / 3PT% / TO
@@ -686,6 +686,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
