@@ -344,19 +344,17 @@ def yahoo_get_player_season_avg(player_key: str):
 
 def yahoo_get_player_stats_by_date_range(player_key: str, days: int = 7):
     """
-    抓某球員「最近 N 天」的數據（逐日 stats → 累積 → 回傳 stat_id -> total_value）
+    抓某球員「最近 N 天」的累積 stats，並盡可能降低記憶體使用。
     """
-    all_stats = {}  # stat_id 累積值
-
+    all_stats = {}
     today = datetime.date.today()
 
     for d in range(days):
         date = today - datetime.timedelta(days=d)
         date_str = date.strftime("%Y-%m-%d")
 
-        path = f"player/{player_key}/stats;type=date;date={date_str}"
-        data = yahoo_api_get(path)
-
+        # 呼叫 API（每次回傳非常大，所以不要保留 data）
+        data = yahoo_api_get(f"player/{player_key}/stats;type=date;date={date_str}")
         if not data:
             continue
 
@@ -389,11 +387,15 @@ def yahoo_get_player_stats_by_date_range(player_key: str, days: int = 7):
 
                 all_stats[stat_id] = all_stats.get(stat_id, 0) + v
 
-        except Exception as e:
-            print("❌ 日期 stats 解析失敗：", e)
+        except:
             continue
 
+        finally:
+            # 🚀 強制釋放 API 回傳資料，避免佔用記憶體
+            del data
+
     return all_stats
+
 
 
 
@@ -934,6 +936,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
