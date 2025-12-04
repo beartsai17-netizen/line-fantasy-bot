@@ -469,13 +469,14 @@ def format_player_stats(stats: dict):
                 break
             except:
                 pass
+    
+    # 2) 如果 league 沒有設定 GP → 使用 stat_id = "0"
+    if gp is None and "0" in stats:
+        try:
+            gp = float(stats["0"])
+        except:
+            gp = None
 
-# 2) 如果 league 沒有設定 GP → 使用 stat_id = "0"
-if gp is None and "0" in stats:
-    try:
-        gp = float(stats["0"])
-    except:
-        gp = None
 
 
     # DEBUG：你也可以暫時印出看看原始 stats & label_map
@@ -655,6 +656,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
