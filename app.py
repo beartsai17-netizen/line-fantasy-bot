@@ -78,6 +78,10 @@ YAHOO_CLIENT_SECRET = os.getenv("YAHOO_CLIENT_SECRET")
 
 REDIRECT_URI = "https://line-fantasy-bot.onrender.com/yahoo/callback"
 
+YAHOO_LEAGUE_KEY = os.getenv("YAHOO_LEAGUE_KEY") 
+
+if not YAHOO_LEAGUE_KEY:
+    print("⚠️ 尚未設定 YAHOO_LEAGUE_KEY，Fantasy 查詢會無法使用")
 
 # Yahoo Step 1：Login URL
 @app.route("/yahoo/login")
@@ -214,6 +218,37 @@ def refresh_yahoo_token_if_needed():
 
     return access_token
 
+def yahoo_api_get(path: str):
+    """
+    Yahoo Fantasy API 共用 GET 函式。
+    path 例如： 'league/{league_key}/players;search=SGA;count=5'
+    會自動：
+    1. 先呼叫 refresh_yahoo_token_if_needed() 拿 access_token
+    2. 用 Bearer token 呼叫 Yahoo Fantasy API
+    3. 回傳 JSON（或 None）
+    """
+    token = refresh_yahoo_token_if_needed()
+    if not token:
+        print("⚠️ 尚未有 Yahoo Token，請先到 /yahoo/login 授權一次")
+        return None
+
+    url = f"https://fantasysports.yahooapis.com/fantasy/v2/{path}?format=json"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+
+    res = requests.get(url, headers=headers)
+    if res.status_code != 200:
+        print("❌ Yahoo API 呼叫失敗：", res.status_code, res.text[:200])
+        return None
+
+    try:
+        return res.json()
+    except Exception as e:
+        print("❌ Yahoo API JSON 解析失敗：", e, res.text[:200])
+        return None
+
 
 # ==============================
 # LINE Webhook
@@ -294,3 +329,4 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
