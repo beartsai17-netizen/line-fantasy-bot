@@ -343,52 +343,173 @@ def yahoo_get_player_season_avg(player_key: str):
         return None
 
 
-# Yahoo stat_id → 可讀名稱（僅做參考）
-STAT_MAP = {
-    "10": "PTS",
-    "13": "REB",
-    "14": "AST",
-    "15": "STL",
-    "16": "BLK",
-    "17": "TO",
-    "9":  "3PTM",
-    "18": "FG%",
-    "19": "FT%",
-    "20": "3PT%",
+# ==============================
+# 動態讀取聯盟 stat 設定 & 格式化球員數據
+# ==============================
+
+STAT_LABEL_MAP = None  # display_name -> stat_id 的對照表（例如 "PTS" -> "25"）
+
+# 想要顯示的欄位（左邊是我們想顯示的 label，用來排順序）
+DESIRED_LABELS = [
+    "PTS",   # 得分
+    "REB",   # 籃板
+    "AST",   # 助攻
+    "STL",   # 抄截
+    "BLK",   # 火鍋
+    "FG%",   # 命中率
+    "FT%",   # 罰球命中率
+    "3PTM",  # 場均三分命中數
+    "3PT%",  # 三分命中率
+    "TO",    # 失誤
+]
+
+# 各項目可能在 Yahoo 裡的名稱（有些聯盟會用 ST / STL 或 3PTM / 3PM 等）
+LABEL_CANDIDATES = {
+    "PTS":  ["PTS"],
+    "REB":  ["REB"],
+    "AST":  ["AST"],
+    "STL":  ["ST", "STL"],
+    "BLK":  ["BLK"],
+    "FG%":  ["FG%", "FG PCT"],
+    "FT%":  ["FT%", "FT PCT"],
+    "3PTM": ["3PTM", "3PM", "3-PTM"],
+    "3PT%": ["3PT%", "3P%", "3-PT%"],
+    "TO":   ["TO", "TOV", "TURNOVERS"],
 }
 
+def load_stat_label_map():
+    """
+    呼叫 league/{league_key}/settings，建立 display_name -> stat_id 的 mapping。
+    只會在第一次用到時打 API，之後都用快取。
+    """
+    global STAT_LABEL_MAP
 
-def format_player_season_avg(stats: dict):
-    get = lambda sid: float(stats.get(sid, 0))
+    if STAT_LABEL_MAP is not None:
+        return STAT_LABEL_MAP
 
-    PTS = get("10")
-    REB = get("13")
-    AST = get("14")
-    STL = get("15")
-    BLK = get("16")
-    TO  = get("17")
+    if not YAHOO_LEAGUE_KEY:
+        print("⚠️ 尚未設定 YAHOO_LEAGUE_KEY，無法載入 stat 設定")
+        STAT_LABEL_MAP = {}
+        return STAT_LABEL_MAP
 
-    FG_pct_raw = get("18")
-    FT_pct_raw = get("19")
-    TPM = get("9")
-    TPM_pct_raw = get("20")
+    data = yahoo_api_get(f"league/{YAHOO_LEAGUE_KEY}/settings")
+    if not data:
+        STAT_LABEL_MAP = {}
+        return STAT_LABEL_MAP
 
-    FG_pct = f"{FG_pct_raw/1000:.3f}"
-    FT_pct = f"{FT_pct_raw/1000:.3f}"
-    TPM_pct = f"{TPM_pct_raw/1000:.3f}"
+    try:
+        league = data["fantasy_content"]["league"]
 
-    return (
-        f"PTS: {PTS}\n"
-        f"REB: {REB}\n"
-        f"AST: {AST}\n"
-        f"STL: {STL}\n"
-        f"BLK: {BLK}\n"
-        f"TO: {TO}\n"
-        f"FG%: {FG_pct}\n"
-        f"FT%: {FT_pct}\n"
-        f"3PTM: {TPM}\n"
-        f"3PT%: {TPM_pct}"
-    )
+        settings_block = None
+        for part in league:
+            if isinstance(part, dict) and "settings" in part:
+                settings_block = part["settings"][0]
+                break
+
+        if not settings_block:
+            print("⚠️ 找不到 settings 區塊")
+            STAT_LABEL_MAP = {}
+            return STAT_LABEL_MAP
+
+        stats = settings_block["stat_categories"]["stats"]
+        label_map = {}
+
+        # 例如 stat 裡會長這樣：
+        # {
+        #   "stat": {
+        #       "stat_id": "5",
+        #       "name": "FGM",
+        #       "display_name": "FGM",
+        #       ...
+        #   }
+        # }
+        for item in stats:
+            stat = item["stat"]
+            stat_id = stat["stat_id"]
+            label = stat.get("display_name") or stat.get("name")
+            if label:
+                label_map[label] = stat_id
+
+        STAT_LABEL_MAP = label_map
+        print("✅ 已載入 league stat 設定：", STAT_LABEL_MAP)
+        return STAT_LABEL_MAP
+
+    except Exception as e:
+        print("❌ 解析 league settings 失敗：", e)
+        STAT_LABEL_MAP = {}
+        return STAT_LABEL_MAP
+
+
+def _find_stat_id_for_label(label: str, label_map: dict):
+    """從 STAT_LABEL_MAP 裡，用 candidates 找到對應的 stat_id"""
+    candidates = LABEL_CANDIDATES.get(label, [label])
+    for cand in candidates:
+        if cand in label_map:
+            return label_map[cand]
+    return None
+
+
+def format_player_stats(stats: dict):
+    """
+    將 Yahoo 回傳的 {stat_id: value} 轉成你要的格式：
+    PTS / REB / AST / STL / BLK / FG% / FT% / 3PTM / 3PT% / TO
+    並把累積數據換算成「本季場均」。
+    """
+    label_map = load_stat_label_map()
+
+    # 先找「出賽場數」對應的 stat_id（可能叫 GP 或 G）
+    gp = None
+    for cand in ["GP", "G"]:
+        sid = _find_stat_id_for_label(cand, label_map) if cand not in label_map else label_map[cand]
+        if sid and sid in stats:
+            try:
+                gp = float(stats[sid])
+            except Exception:
+                gp = None
+            break
+
+    # DEBUG：你也可以暫時印出看看原始 stats & label_map
+    print("🔎 Raw stats:", stats)
+    print("🔎 Label map:", label_map)
+    print("🔎 Games played (gp):", gp)
+
+    lines = []
+
+    for label in DESIRED_LABELS:
+        stat_id = _find_stat_id_for_label(label, label_map)
+        if not stat_id:
+            continue
+
+        raw_val = stats.get(stat_id)
+        if raw_val is None or raw_val == "":
+            continue
+
+        try:
+            v = float(raw_val)
+        except Exception:
+            # 偶爾會是字串，直接顯示
+            lines.append(f"{label}: {raw_val}")
+            continue
+
+        # 計數型：換算成「本季場均」
+        if label in ["PTS", "REB", "AST", "STL", "BLK", "3PTM", "TO"]:
+            if gp and gp > 0:
+                per_game = v / gp
+                lines.append(f"{label}: {per_game:.1f}")
+            else:
+                lines.append(f"{label}: {v}")
+
+        # 百分比型：用 0.XXX 千分比顯示
+        elif label in ["FG%", "FT%", "3PT%"]:
+            # 如果 Yahoo 給的是 47.1 就除以 100；如果本來就是 0.471 就直接用
+            if v > 1:
+                v = v / 100.0
+            lines.append(f"{label}: {v:.3f}")
+
+    if not lines:
+        return "尚無可讀數據"
+
+    return "\n".join(lines)
 
 
 
@@ -526,6 +647,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
