@@ -725,6 +725,21 @@ def handle_message(event):
                     f"{pretty}"
                 )
 
+    elif command == "player_2week":
+        if not argument:
+            reply_text = "請在 !player_2week 後面加球員名字，例如：!player_2week curry"
+        else:
+            player = yahoo_search_player_by_name(argument)
+            if not player:
+                reply_text = f"找不到球員：{argument}"
+            else:
+                stats14 = yahoo_get_player_stats_by_date_range(player["player_key"], days=14)
+                pretty = format_player_recent_avg(stats14, 14)
+                reply_text = (
+                    f"📆 {player['name']}（{player['team']}）\n"
+                    f"—— 最近 14 天場均 ——\n"
+                    f"{pretty}"
+                )
     
                             
     elif command == "leagues":
@@ -772,6 +787,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
