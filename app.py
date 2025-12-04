@@ -345,54 +345,71 @@ def yahoo_get_player_season_stats(player_key: str):
         print("❌ 解析 Yahoo 玩家 stats 失敗：", e)
         return None
 
-# Yahoo stat_id → 可讀名稱
+# Yahoo stat_id → 可讀名稱（僅做參考）
 STAT_MAP = {
-    "9004003": "GP",
-    "5": "FGM",
-    "6": "FGA",
-    "9": "3PTM",
     "10": "PTS",
-    "11": "OREB",
-    "12": "DREB",
     "13": "REB",
     "14": "AST",
     "15": "STL",
     "16": "BLK",
     "17": "TO",
+    "9":  "3PTM",
     "18": "FG%",
     "19": "FT%",
     "20": "3PT%",
 }
 
-def format_player_stats_pretty(stats: dict):
+
+def format_player_stats(stats: dict) -> str:
     """
-    將 Yahoo stat_id dict → 排序後的可讀格式
-    並依指定格式顯示 0.xxx 命中率
+    依照指定順序輸出：
+    PTS / REB / AST / STL / BLK / TO / FG% / FT% / 3PTM / 3PT%
+    並把命中率類型轉成 0.XXX 格式
     """
 
-    # 取值，如果沒有就顯示 "-"
-    def get(sid):
-        return stats.get(sid, "-")
+    def get(stat_id: str, default="-"):
+        return stats.get(stat_id, default)
 
-    # 轉成 0.xxx 格式
-    def pct(v):
+    def fmt_pct(raw):
+        """把原始數值轉成 0.XXX 形式，如果本來就是 0.x 就直接格式化"""
         try:
-            return f"{float(v):.3f}"
-        except:
-            return "-"
+            f = float(raw)
+        except (TypeError, ValueError):
+            return str(raw)
 
-    # 依你指定的順序輸出
+        # 如果大於 1，合理推測是百分比（例如 47.1），轉成 0.471
+        if f > 1:
+            f = f / 100.0
+        return f"{f:.3f}"
+
+    # 先抓原始值
+    pts   = get("10")
+    reb   = get("13")
+    ast   = get("14")
+    stl   = get("15")
+    blk   = get("16")
+    to    = get("17")
+    fg_pct_raw  = get("18")
+    ft_pct_raw  = get("19")
+    tpm   = get("9")
+    tppct_raw   = get("20")
+
+    # 命中率轉換成 0.XXX
+    fg_pct = fmt_pct(fg_pct_raw) if fg_pct_raw != "-" else "-"
+    ft_pct = fmt_pct(ft_pct_raw) if ft_pct_raw != "-" else "-"
+    tp_pct = fmt_pct(tppct_raw)  if tppct_raw != "-" else "-"
+
     lines = [
-        f"PTS: {get('10')}",
-        f"REB: {get('13')}",
-        f"AST: {get('14')}",
-        f"STL: {get('15')}",
-        f"BLK: {get('16')}",
-        f"TO: {get('17')}",
-        f"FG%: {pct(get('18'))}",
-        f"FT%: {pct(get('19'))}",
-        f"3PTM: {get('9')}",
-        f"3PT%: {pct(get('20'))}",
+        f"PTS: {pts}",
+        f"REB: {reb}",
+        f"AST: {ast}",
+        f"STL: {stl}",
+        f"BLK: {blk}",
+        f"TO: {to}",
+        f"FG%: {fg_pct}",
+        f"FT%: {ft_pct}",
+        f"3PTM: {tpm}",
+        f"3PT%: {tp_pct}",
     ]
 
     return "\n".join(lines)
@@ -534,6 +551,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
