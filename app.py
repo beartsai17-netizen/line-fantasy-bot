@@ -250,21 +250,10 @@ def yahoo_api_get(path: str):
         return None
 
 def yahoo_search_player_by_name(name: str):
-    """
-    使用 Yahoo Fantasy API 在指定 league 裡「模糊搜尋球員」。
-    回傳：
-      {
-        "player_key": str,
-        "name": str,
-        "team": str
-      }
-    找不到則回傳 None
-    """
     if not YAHOO_LEAGUE_KEY:
         print("⚠️ 尚未設定 YAHOO_LEAGUE_KEY")
         return None
 
-    # name 需要 URL encode
     encoded_name = urllib.parse.quote(name)
     path = f"league/{YAHOO_LEAGUE_KEY}/players;search={encoded_name};count=5"
 
@@ -273,8 +262,6 @@ def yahoo_search_player_by_name(name: str):
         return None
 
     try:
-        # 結構大致為：
-        # fantasy_content -> league -> [ {...}, { "players": { "0": { "player": [ {...}, ... ] }, "count": N } } ]
         league = data["fantasy_content"]["league"]
         players_obj = league[1]["players"]
         count = int(players_obj["count"])
@@ -282,18 +269,28 @@ def yahoo_search_player_by_name(name: str):
         if count == 0:
             return None
 
-        # 先拿第一個當最佳匹配
-        first = players_obj["0"]["player"]
+        # 取第一筆玩家
+        raw_player = players_obj["0"]["player"]
 
-        # first[0] 通常是 player 的基本資訊 block
-        base_info = first[0]
-        player_key = base_info.get("player_key")
-        name_full = base_info.get("name", {}).get("full", "")
+        # 玩家資料實際是雙層 list：player[0] 才是真資料陣列
+        info_list = raw_player[0]  
 
+        player_key = None
+        name_full = None
         team = ""
-        for part in first:
-            if isinstance(part, dict) and "editorial_team_abbr" in part:
-                team = part["editorial_team_abbr"]
+
+        for block in info_list:
+            if not isinstance(block, dict):
+                continue
+            if "player_key" in block:
+                player_key = block["player_key"]
+            if "name" in block:
+                name_full = block["name"]["full"]
+            if "editorial_team_abbr" in block:
+                team = block["editorial_team_abbr"]
+
+        if not player_key:
+            return None
 
         return {
             "player_key": player_key,
@@ -303,9 +300,9 @@ def yahoo_search_player_by_name(name: str):
 
     except Exception as e:
         print("❌ 解析 Yahoo 玩家搜尋結果失敗：", e)
-        print("=== Yahoo 回傳資料 ===")
         print(json.dumps(data, indent=2))
         return None
+
 
 
 def yahoo_get_player_season_stats(player_key: str):
@@ -512,6 +509,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
