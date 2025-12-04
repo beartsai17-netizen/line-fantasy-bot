@@ -249,6 +249,102 @@ def yahoo_api_get(path: str):
         print("❌ Yahoo API JSON 解析失敗：", e, res.text[:200])
         return None
 
+def yahoo_search_player_by_name(name: str):
+    """
+    使用 Yahoo Fantasy API 在指定 league 裡「模糊搜尋球員」。
+    回傳：
+      {
+        "player_key": str,
+        "name": str,
+        "team": str
+      }
+    找不到則回傳 None
+    """
+    if not YAHOO_LEAGUE_KEY:
+        print("⚠️ 尚未設定 YAHOO_LEAGUE_KEY")
+        return None
+
+    # name 需要 URL encode
+    encoded_name = urllib.parse.quote(name)
+    path = f"league/{YAHOO_LEAGUE_KEY}/players;search={encoded_name};count=5"
+
+    data = yahoo_api_get(path)
+    if not data:
+        return None
+
+    try:
+        # 結構大致為：
+        # fantasy_content -> league -> [ {...}, { "players": { "0": { "player": [ {...}, ... ] }, "count": N } } ]
+        league = data["fantasy_content"]["league"]
+        players_obj = league[1]["players"]
+        count = int(players_obj["count"])
+
+        if count == 0:
+            return None
+
+        # 先拿第一個當最佳匹配
+        first = players_obj["0"]["player"]
+
+        # first[0] 通常是 player 的基本資訊 block
+        base_info = first[0]
+        player_key = base_info.get("player_key")
+        name_full = base_info.get("name", {}).get("full", "")
+
+        team = ""
+        for part in first:
+            if isinstance(part, dict) and "editorial_team_abbr" in part:
+                team = part["editorial_team_abbr"]
+
+        return {
+            "player_key": player_key,
+            "name": name_full or name,
+            "team": team,
+        }
+
+    except Exception as e:
+        print("❌ 解析 Yahoo 玩家搜尋結果失敗：", e)
+        return None
+
+def yahoo_get_player_season_stats(player_key: str):
+    """
+    先取 Yahoo 提供的 player stats（通常是本季平均 or 累積）。
+    回傳一個 dict：{ stat_id: value, ... }
+    """
+    path = f"player/{player_key}/stats"
+    data = yahoo_api_get(path)
+    if not data:
+        return None
+
+    try:
+        # 結構類似：
+        # fantasy_content -> player -> [ {...基本資訊...}, { "player_stats": { "stats": [ { "stat": {...}}, ... ] } } ]
+        player_arr = data["fantasy_content"]["player"]
+
+        stats_block = None
+        for part in player_arr:
+            if isinstance(part, dict) and "player_stats" in part:
+                stats_block = part["player_stats"]
+                break
+
+        if not stats_block:
+            return None
+
+        stats_list = stats_block["stats"]
+
+        stat_map = {}
+        for s in stats_list:
+            stat = s.get("stat", {})
+            stat_id = stat.get("stat_id")
+            value = stat.get("value")
+            if stat_id is not None:
+                stat_map[stat_id] = value
+
+        return stat_map
+
+    except Exception as e:
+        print("❌ 解析 Yahoo 玩家 stats 失敗：", e)
+        return None
+
 
 # ==============================
 # LINE Webhook
@@ -292,6 +388,32 @@ def handle_message(event):
         token = refresh_yahoo_token_if_needed()
         reply_text = f"目前 Token：{token[:20]}..."
 
+     elif command == "player":
+        if not argument:
+            reply_text = "請在 !player 後面加球員名字，例如：!player SGA"
+        else:
+            if not YAHOO_LEAGUE_KEY:
+                reply_text = "尚未設定 YAHOO_LEAGUE_KEY，請先在環境變數設定。"
+            else:
+                player = yahoo_search_player_by_name(argument)
+                if not player:
+                    reply_text = f"找不到球員：{argument}"
+                else:
+                    stats = yahoo_get_player_season_stats(player["player_key"])
+                    if not stats:
+                        reply_text = f"{player['name']} 暫時查不到 stats（請先看 Render log 的 Yahoo 回傳 JSON）"
+                    else:
+                        # 先把前幾個 stat_id:value 顯示出來，之後再 mapping 成 PTS / REB / AST...
+                        sample_items = list(stats.items())[:8]
+                        stats_lines = "\n".join(
+                            [f"stat_id {k}: {v}" for k, v in sample_items]
+                        )
+                        reply_text = (
+                            f"{player['name']}（{player['team']}）本季部分數據：\n"
+                            f"{stats_lines}\n\n"
+                            f"(之後我們可以把 stat_id 對應成 PTS / REB / AST 等人類看得懂的格式)"
+                        )
+ 
     # ChatGPT
     elif command == "bot":
         if not argument:
@@ -329,4 +451,5 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
