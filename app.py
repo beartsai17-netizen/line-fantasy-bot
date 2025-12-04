@@ -395,6 +395,35 @@ def yahoo_get_player_stats_by_date_range(player_key: str, days: int = 7):
 
     return all_stats
 
+def yahoo_get_player_last14(player_key):
+    path = f"player/{player_key}/stats;type=last_14"
+    data = yahoo_api_get(path)
+    if not data:
+        return None
+    
+    try:
+        player_arr = data["fantasy_content"]["player"]
+        
+        stats_block = None
+        for part in player_arr:
+            if isinstance(part, dict) and "player_stats" in part:
+                stats_block = part["player_stats"]
+                break
+
+        if not stats_block:
+            return None
+        
+        stat_map = {}
+        for s in stats_block["stats"]:
+            stat = s["stat"]
+            stat_map[stat["stat_id"]] = stat["value"]
+        
+        return stat_map
+
+    except Exception as e:
+        print("❌ last14 解析失敗：", e)
+        return None
+
 def yahoo_get_player_update(player_key: str):
     """取得球員最新傷情 + Notes"""
     data = yahoo_api_get(f"player/{player_key}/notes")
@@ -830,19 +859,23 @@ def handle_message(event):
 
     elif command == "player_2week":
         if not argument:
-            reply_text = "請在 !player_2week 後面加球員名字，例如：!player_2week curry"
+            reply_text = "請在 !player_2week 後加球員名字"
         else:
             player = yahoo_search_player_by_name(argument)
             if not player:
                 reply_text = f"找不到球員：{argument}"
             else:
-                stats14 = yahoo_get_player_stats_by_date_range(player["player_key"], days=14)
-                pretty = format_player_recent_avg(stats14, 14)
-                reply_text = (
-                    f"📆 {player['name']}（{player['team']}）\n"
-                    f"—— 最近 14 天場均 ——\n"
-                    f"{pretty}"
-                )
+                stats = yahoo_get_player_last14(player["player_key"])
+                if not stats:
+                    reply_text = f"{player['name']} 暫時查不到 14 天 stats"
+                else:
+                    pretty = format_player_season(stats)
+                    reply_text = (
+                        f"📊 {player['name']}（{player['team']}）\n"
+                        f"—— 最近 14 天場均 ——\n"
+                        f"{pretty}"
+                    )
+
     
     elif command == "player_update":
         if not argument:
@@ -913,6 +946,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
