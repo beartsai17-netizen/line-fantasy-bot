@@ -303,7 +303,10 @@ def yahoo_search_player_by_name(name: str):
 
     except Exception as e:
         print("❌ 解析 Yahoo 玩家搜尋結果失敗：", e)
+        print("=== Yahoo 回傳資料 ===")
+        print(json.dumps(data, indent=2))
         return None
+
 
 def yahoo_get_player_season_stats(player_key: str):
     """
@@ -509,6 +512,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
