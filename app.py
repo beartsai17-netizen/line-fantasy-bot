@@ -799,6 +799,77 @@ def yahoo_get_player_detail(player_key):
         print("❌ 解析玩家傷情失敗：", e)
         return None
 
+def get_nba_today_games():
+    url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+    res = requests.get(url, timeout=5)
+    data = res.json()
+    return data["scoreboard"]["games"]
+
+def get_game_leaders(game_id):
+    url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+    res = requests.get(url, timeout=5)
+    data = res.json()
+
+    game = data["game"]
+
+    # 兩隊
+    home = game["homeTeam"]
+    away = game["awayTeam"]
+
+    # 統計六項
+    stats = ["points", "reboundsTotal", "assists", "steals", "blocks", "turnovers"]
+
+    def get_leaders(team):
+        leaders = {}
+        for s in stats:
+            best = max(team["players"], key=lambda p: p["statistics"].get(s, 0))
+            leaders[s] = {
+                "name": best["name"],
+                "value": best["statistics"].get(s, 0)
+            }
+        return leaders
+
+    return {
+        "home": {
+            "tri": home["teamTricode"],
+            "score": home["score"],
+            "leaders": get_leaders(home)
+        },
+        "away": {
+            "tri": away["teamTricode"],
+            "score": away["score"],
+            "leaders": get_leaders(away)
+        },
+        "status": game["gameStatusText"]
+    }
+
+def format_game_summary(game_info):
+    home = game_info["home"]
+    away = game_info["away"]
+    status = game_info["status"]
+
+    stat_names = {
+        "points": "得分",
+        "reboundsTotal": "籃板",
+        "assists": "助攻",
+        "steals": "抄截",
+        "blocks": "火鍋",
+        "turnovers": "失誤"
+    }
+
+    def format_team(team):
+        lines = []
+        for stat, cn in stat_names.items():
+            leader = team["leaders"][stat]
+            lines.append(f"{cn}：{leader['name']} {leader['value']}")
+        return "\n".join(lines)
+
+    return (
+        f"{away['tri']} {away['score']} – {home['score']} {home['tri']}（{status}）\n\n"
+        f"{away['tri']} 數據王：\n{format_team(away)}\n\n"
+        f"{home['tri']} 數據王：\n{format_team(home)}"
+    )
+
 
 # ==============================
 # LINE Webhook
@@ -938,7 +1009,21 @@ def handle_message(event):
                             f"傷病：{note}"
                         )
 
-                            
+    elif command == "nba":
+        try:
+            games = get_nba_today_games()
+            all_text = []
+            for g in games:
+                gid = g["gameId"]
+                info = get_game_leaders(gid)
+                summary = format_game_summary(info)
+                all_text.append(summary)
+    
+            reply_text = "🏀 今日 NBA 概況\n\n" + "\n\n================\n\n".join(all_text)
+    
+        except Exception as e:
+            reply_text = f"NBA 資料取得錯誤：{e}"
+                                
  
     # ChatGPT
     elif command == "bot":
@@ -977,6 +1062,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
