@@ -112,3 +112,37 @@ def evaluate_trade(nameA, textA, nameB, textB):
         messages=[{"role": "user", "content": prompt}]
     )
     return res.choices[0].message.content
+
+def analyze_value(player_name, season_text, last14_text, injury_text):
+    """LLM：球員價值分析（Buy / Sell / Hold）"""
+    prompt = f"""
+請以 Yahoo Fantasy 的角度分析球員「{player_name}」的價值。
+
+以下是他的資料：
+
+【本季場均數據】
+{season_text}
+
+【最近 14 天的場均表現】
+{last14_text}
+
+【傷病狀況】
+{injury_text}
+
+請從以下方向進行分析：
+1. 本季 baseline：他在該類別的期待值，是否高於/低於平均？
+2. 兩週趨勢：是否呈現上升或下滑？哪些類別變強/變弱？
+3. Regression 推估：過度波動 or 回到正常？
+4. 角色與上場時間：有無起伏風險？
+5. 傷病風險：是否會影響後續價值？
+6. 給出最終結論：Buy Low / Sell High / Hold 中的其中一個。
+
+輸出格式請簡潔、有層次，並提供 Fantasy 玩家可直接採用的建議。
+"""
+
+    res = client.chat.completions.create(
+        model="gpt-4.1",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return res.choices[0].message.content
+
