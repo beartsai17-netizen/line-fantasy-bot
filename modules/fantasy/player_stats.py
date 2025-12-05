@@ -18,7 +18,18 @@ def get_recent_stats(player_key, days):
     return yahoo_get_player_stats_by_date_range(player_key, days)
 
 
+# modules/fantasy/player_stats.py
+
 def format_stats_for_llm(stats_dict):
-    """將 Yahoo 回傳的 dict 整理為可讀文字（餵進 LLM）"""
-    # 這裡先留空，之後我們會做格式化
-    return str(stats_dict)
+    """
+    將 Yahoo API 回傳的 stats dict，整理成 GPT 能讀懂的格式。
+    """
+    if not stats_dict:
+        return "沒有可用的數據"
+
+    lines = []
+    for k, v in stats_dict.items():
+        lines.append(f"{k}: {v}")
+
+    return "\n".join(lines)
+
