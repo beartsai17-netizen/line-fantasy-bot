@@ -939,7 +939,25 @@ def handle_message(event):
                 )
 
 
- 
+     # !injury <name>
+    elif command == "injury":
+        if not argument:
+            reply_text = "用法：!injury Curry"
+        else:
+            player = yahoo_search_player_by_name(argument)
+            if not player:
+                reply_text = f"找不到球員：{argument}"
+            else:
+                detail = yahoo_get_player_detail(player["player_key"])
+    
+                from modules.fantasy.player_stats import format_injury_status
+                injury_text = format_injury_status(detail)
+    
+                reply_text = (
+                    f"🩺 {player['name']}（{player['team']}）傷病狀態\n"
+                    f"{injury_text}"
+            )
+
 
     elif command == "compare":
         try:
@@ -1035,6 +1053,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
