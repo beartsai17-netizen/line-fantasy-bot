@@ -146,3 +146,35 @@ def analyze_value(player_name, season_text, last14_text, injury_text):
     )
     return res.choices[0].message.content
 
+def compare_players(nameA, textA, nameB, textB):
+    """LLM：比較兩位球員"""
+
+    prompt = f"""
+你是一位 Yahoo Fantasy 專業分析師，請比較兩位球員：
+
+球員 A：{nameA}
+數據：
+{textA}
+
+球員 B：{nameB}
+數據：
+{textB}
+
+請依照以下面向分析：
+
+1. 類別強弱（PTS / REB / AST / STL / BLK / TO / FG% / FT% / 3PM）
+2. 使用率 (usage) 與角色穩定性
+3. Regression 風險（過高表現是否會回落）
+4. 傷病風險
+5. 適合不同類型隊伍的原因
+6. 最終給出簡潔結論（誰更適合大多數 Fantasy 玩家）
+
+請用條列式、清楚分段的方式回答。
+"""
+
+    res = client.chat.completions.create(
+        model="gpt-4.1",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    return res.choices[0].message.content
