@@ -926,27 +926,30 @@ def callback():
 # ==============================
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
-    user_text = event.message.text.strip()
-    
-    # 若是群組，且不是 ! 指令 → 記錄訊息
-    if event.source.type == "group" and not user_text.startswith("!"):
-        save_group_message(event, user_text)
-        return   
-    
+    # 1. 先處理 LINE 的重送機制（避免重複記錄＆重複回覆）
     if event.delivery_context.is_redelivery:
         print("🔁 忽略重送訊息")
         return
 
     user_text = event.message.text.strip()
 
+    # 2. 群組中「非指令」→ 只記錄到 group_memory，不回覆
+    if event.source.type == "group" and not user_text.startswith("!"):
+        save_group_message(event, user_text)
+        return   # 🚨 一定要有，否則會跑到下面的 reply_message
+
+    # 3. 不是「!」開頭的，直接忽略（例如一對一聊天）
     if not user_text.startswith("!"):
         return
 
+    # 4. 解析指令與參數
     parts = user_text[1:].split(" ", 1)
     command = parts[0].lower()
     argument = parts[1] if len(parts) > 1 else ""
 
-    # Fantasy Module
+    reply_text = "（沒有產生回覆）"   # 預設一個值，避免任何意外情況沒有設定
+
+    # ===== Fantasy Module =====
     if command == "ff":
         reply_text = f"[Fantasy 指令收到] 參數：{argument}"
 
@@ -962,17 +965,16 @@ def handle_message(event):
                 if not stats:
                     reply_text = f"{player['name']} 暫時查不到 stats"
                 else:
-                    # ✅ 這裡改成呼叫 format_player_stats
                     pretty_stats = format_player_stats(stats)
                     reply_text = (
                         f"📊 {player['name']}（{player['team']}）\n"
                         f"—— 本季場均 ——\n"
                         f"{pretty_stats}"
                     )
-                    
+
     elif command == "player_week":
         if not argument:
-            reply_text = "請在 !player_week 後面加球員名字，例如：!player_week curry"
+            reply_text = "請在 !player_week 後面加球員名字，例如：!player_week Curry"
         else:
             player = yahoo_search_player_by_name(argument)
             if not player:
@@ -985,6 +987,7 @@ def handle_message(event):
                     f"—— 最近 7 天場均 ——\n"
                     f"{pretty}"
                 )
+
     elif command == "player_2week":
         if not argument:
             reply_text = "請在 !player_2week 後面加球員名字，例如：!player_2week SGA"
@@ -1000,7 +1003,6 @@ def handle_message(event):
                     f"—— 近 14 天場均 ——\n"
                     f"{pretty_stats}"
                 )
-
 
     elif command == "player_month":
         if not argument:
@@ -1021,12 +1023,11 @@ def handle_message(event):
     elif command == "compare":
         try:
             nameA, nameB = argument.split(" ", 1)
-        except:
+        except Exception:
             reply_text = "用法：!compare Curry Lillard"
         else:
             reply_text = compare_two_players(nameA, nameB)
 
-    
     elif command == "player_update":
         if not argument:
             reply_text = "請在 !player_update 後加球員名字"
@@ -1059,44 +1060,46 @@ def handle_message(event):
                 info = get_game_leaders(gid)
                 summary = format_game_summary(info)
                 all_text.append(summary)
-    
+
             reply_text = "🏀 今日 NBA 概況\n\n" + "\n\n================\n\n".join(all_text)
-    
+
         except Exception as e:
             reply_text = f"NBA 資料取得錯誤：{e}"
-                                
- 
-    # ChatGPT
+
+    # ===== ChatGPT + 群組記憶 =====
     elif command == "bot":
         if not argument:
             reply_text = "請輸入問題"
         else:
             try:
                 group_id = event.source.group_id if event.source.type == "group" else ""
-    
                 memory = load_group_memory(group_id, limit=80)
-    
+
                 system_prompt = (
                     "你是一個友善的 LINE 群組助理。\n"
                     "請在回答時參考以下群組近期聊天內容：\n\n"
                     f"{memory}\n"
                     "——以上是群組背景——"
                 )
-    
+
                 res = client.chat.completions.create(
-                    model="gpt-4.1",   # <-- 使用最新模型
+                    model="gpt-4.1",
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": argument},
                     ],
                 )
-    
                 reply_text = res.choices[0].message.content
-    
+
             except Exception as e:
                 reply_text = f"ChatGPT 錯誤：{e}"
 
-    # Reply Message
+    else:
+        # 未知指令 → fallback 到 Google Sheet keyword_reply 或提示
+        cmds = load_sheet_commands()
+        reply_text = cmds.get(command, f"查無指令：{command}")
+
+    # 5. 統一回覆
     with ApiClient(configuration) as api_client:
         MessagingApi(api_client).reply_message(
             ReplyMessageRequest(
@@ -1106,12 +1109,14 @@ def handle_message(event):
         )
 
 
+
 # ==============================
 # Start Server
 # ==============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
