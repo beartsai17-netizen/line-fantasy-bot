@@ -912,53 +912,31 @@ def handle_message(event):
                         f"{pretty_stats}"
                     )
 
-    elif command == "player_week":
+    # !last14 <name>
+    elif command == "last14":
         if not argument:
-            reply_text = "請在 !player_week 後面加球員名字，例如：!player_week Curry"
+            reply_text = "用法：!last14 Curry"
         else:
             player = yahoo_search_player_by_name(argument)
             if not player:
                 reply_text = f"找不到球員：{argument}"
             else:
-                stats7 = yahoo_get_player_stats_by_date_range(player["player_key"], days=7)
-                pretty = format_player_recent_avg(stats7, 7)
+                from modules.fantasy.player_stats import get_recent_stats, format_stats_for_llm
+                from modules.fantasy.analysis_llm import analyze_last14
+    
+                stats14 = get_recent_stats(player["player_key"], days=14)
+                stats_text = format_stats_for_llm(stats14)
+    
+                # 使用 LLM 分析
+                analysis = analyze_last14(player["name"], stats_text)
+    
                 reply_text = (
-                    f"📆 {player['name']}（{player['team']}）\n"
-                    f"—— 最近 7 天場均 ——\n"
-                    f"{pretty}"
+                    f"📆 {player['name']} 最近 14 天趨勢分析\n"
+                    f"{analysis}"
                 )
 
-    elif command == "player_2week":
-        if not argument:
-            reply_text = "請在 !player_2week 後面加球員名字，例如：!player_2week SGA"
-        else:
-            player = yahoo_search_player_by_name(argument)
-            if not player:
-                reply_text = f"找不到球員：{argument}"
-            else:
-                stats = yahoo_get_player_stats_by_date_range(player["player_key"], days=14)
-                pretty_stats = format_player_stats(stats)
-                reply_text = (
-                    f"📊 {player['name']}（{player['team']}）\n"
-                    f"—— 近 14 天場均 ——\n"
-                    f"{pretty_stats}"
-                )
 
-    elif command == "player_month":
-        if not argument:
-            reply_text = "請在 !player_month 後面加球員名字，例如：!player_month Curry"
-        else:
-            player = yahoo_search_player_by_name(argument)
-            if not player:
-                reply_text = f"找不到球員：{argument}"
-            else:
-                stats = yahoo_get_player_stats_by_date_range(player["player_key"], days=30)
-                pretty_stats = format_player_stats(stats)
-                reply_text = (
-                    f"📊 {player['name']}（{player['team']}）\n"
-                    f"—— 近 30 天場均 ——\n"
-                    f"{pretty_stats}"
-                )
+ 
 
     elif command == "compare":
         try:
@@ -1054,6 +1032,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
