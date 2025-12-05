@@ -11,11 +11,18 @@ from modules.llm import client
 def analyze_last14(player_name, stats_14d_text):
     """LLM：分析最近 14 天趨勢"""
     prompt = f"""
-請分析球員 {player_name} 最近 14 天的數據變化，以下是原始統計資料：
+請分析球員 {player_name} 在 Yahoo Fantasy 的最近 14 天表現。
+
+以下是他最近 14 天的累積數據（已除以場次）：
 
 {stats_14d_text}
 
-請給出趨勢、主要亮點、風險、對 fantasy 的建議。
+請回答：
+- 他在哪些數據變強？
+- 哪些變弱？
+- 是否回到應有水平？
+- 對 Fantasy 玩家意味著什麼？
+- 是否建議 Buy / Hold / Sell？
 """
 
     res = client.chat.completions.create(
@@ -23,6 +30,7 @@ def analyze_last14(player_name, stats_14d_text):
         messages=[{"role": "user", "content": prompt}]
     )
     return res.choices[0].message.content
+
 
 
 def analyze_value(player_name, season_text, last14_text, injury_text):
