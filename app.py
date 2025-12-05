@@ -1152,6 +1152,56 @@ def handle_message(event):
         except Exception as e:
             reply_text = f"NBA 資料取得錯誤：{e}"
 
+
+    elif command == "fa":
+    # 分析需求的 categories
+        categories = []
+        if argument:
+            categories = argument.lower().split(" ")
+    
+        # 抓 FA 列表
+        if not YAHOO_LEAGUE_KEY:
+            reply_text = "尚未設定 YAHOO_LEAGUE_KEY"
+        else:
+            fa_raw = yahoo_get_fa_list(YAHOO_LEAGUE_KEY, count=20)
+    
+            from modules.fantasy.player_stats import (
+                get_season_stats,
+                get_recent_stats,
+                format_stats_for_llm
+            )
+            from modules.fantasy.fa import llm_rank_fa
+    
+            fa_stats_list = []
+    
+            for player in fa_raw:
+                # 搜尋 player_key
+                p = yahoo_search_player_by_name(player["name"])
+                if not p:
+                    continue
+    
+                # 抓 stats
+                season = get_season_stats(p["player_key"])
+                last7 = get_recent_stats(p["player_key"], days=7)
+    
+                text = (
+                    "【本季】\n" +
+                    format_stats_for_llm(season) +
+                    "\n\n【最近 7 天】\n" +
+                    format_stats_for_llm(last7)
+                )
+    
+                fa_stats_list.append({
+                    "name": player["name"],
+                    "team": player["team"],
+                    "stats_text": text
+                })
+    
+            # 丟給 LLM 排名
+            analysis = llm_rank_fa(fa_stats_list, categories)
+    
+            reply_text = f"🔥 自由球員推薦\n{analysis}"
+
     # ===== ChatGPT + 群組記憶 =====
     elif command == "bot":
         if not argument:
@@ -1200,6 +1250,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
