@@ -931,7 +931,7 @@ def handle_message(event):
     # 若是群組，且不是 ! 指令 → 記錄訊息
     if event.source.type == "group" and not user_text.startswith("!"):
         save_group_message(event, user_text)
-
+        return   
     
     if event.delivery_context.is_redelivery:
         print("🔁 忽略重送訊息")
@@ -1112,6 +1112,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
