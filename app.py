@@ -69,6 +69,41 @@ def load_sheet_commands():
         print("❌ Google Sheet 載入失敗:", e)
         return {}
 
+def save_group_message(event, text):
+    try:
+        # 僅記錄群組訊息
+        if event.source.type != "group":
+            return
+
+        sheet = get_gsheet().worksheet("group_memory")
+
+        ts = datetime.datetime.now().isoformat()
+        group_id = event.source.group_id
+        user = event.source.user_id  # 若你後續要反查 LINE displayName 可加上
+
+        sheet.append_row([ts, group_id, user, text])
+
+    except Exception as e:
+        print("❌ 無法寫入聊天記錄:", e)
+
+def load_group_memory(group_id, limit=80):
+    try:
+        sheet = get_gsheet().worksheet("group_memory")
+        rows = sheet.get_all_records()
+
+        msgs = [r for r in rows if str(r["group_id"]) == str(group_id)]
+        msgs = msgs[-limit:]  # 取最新 N 則
+
+        memory_text = ""
+        for m in msgs:
+            memory_text += f"{m['user']}: {m['text']}\n"
+
+        return memory_text
+
+    except Exception as e:
+        print("❌ 無法讀取群組記憶:", e)
+        return ""
+
 
 # ==============================
 # Yahoo Fantasy OAuth
@@ -891,7 +926,13 @@ def callback():
 # ==============================
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
+    user_text = event.message.text.strip()
+    
+    # 若是群組，且不是 ! 指令 → 記錄訊息
+    if event.source.type == "group" and not user_text.startswith("!"):
+        save_group_message(event, user_text)
 
+    
     if event.delivery_context.is_redelivery:
         print("🔁 忽略重送訊息")
         return
@@ -1031,20 +1072,29 @@ def handle_message(event):
             reply_text = "請輸入問題"
         else:
             try:
+                group_id = event.source.group_id if event.source.type == "group" else ""
+    
+                memory = load_group_memory(group_id, limit=80)
+    
+                system_prompt = (
+                    "你是一個友善的 LINE 群組助理。\n"
+                    "請在回答時參考以下群組近期聊天內容：\n\n"
+                    f"{memory}\n"
+                    "——以上是群組背景——"
+                )
+    
                 res = client.chat.completions.create(
-                    model="gpt-4.1",
+                    model="gpt-4.1",   # <-- 使用最新模型
                     messages=[
-                        {"role": "system", "content": "你是一個友善的聊天助手。"},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": argument},
                     ],
                 )
+    
                 reply_text = res.choices[0].message.content
+    
             except Exception as e:
                 reply_text = f"ChatGPT 錯誤：{e}"
-
-    else:
-        cmds = load_sheet_commands()
-        reply_text = cmds.get(command, f"查無指令：{command}")
 
     # Reply Message
     with ApiClient(configuration) as api_client:
@@ -1062,6 +1112,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
