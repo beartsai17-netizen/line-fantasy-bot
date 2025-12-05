@@ -33,3 +33,27 @@ def format_stats_for_llm(stats_dict):
 
     return "\n".join(lines)
 
+def format_injury_status(raw_detail):
+    """
+    將 Yahoo API 回傳的傷病資料格式化成固定模板。
+    raw_detail 來自 yahoo_get_player_detail()
+    """
+    if not raw_detail:
+        return "沒有傷病資訊。"
+
+    status = raw_detail.get("status") or "無資料"
+    injury = raw_detail.get("injury") or "—"
+
+    # 可擴充 mapping（你之後可補充更多）
+    status_map = {
+        "GTD": "🟡 今日出賽成疑 (GTD)",
+        "O":   "🔴 缺席 (O)",
+        "OUT": "🔴 缺席中 (OUT)",
+        "INJ": "🔴 受傷（可放 IR）(INJ)",
+        "DL":  "🔴 長期缺席 (DL)",
+        "NA":  "⚪ 非激活 (NA)",
+    }
+
+    status_text = status_map.get(status, f"⚪ 狀態：{status}")
+
+    return f"{status_text}\n傷病：{injury}"
