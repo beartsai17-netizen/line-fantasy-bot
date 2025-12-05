@@ -995,36 +995,57 @@ def handle_message(event):
                     f"{analysis}"
                 )
 
-    elif command == "compare":
+     # !vs <nameA> <nameB>
+    elif command == "vs":
         try:
             nameA, nameB = argument.split(" ", 1)
-        except Exception:
-            reply_text = "用法：!compare Curry Lillard"
+        except:
+            reply_text = "用法：!vs Curry Lillard"
         else:
-            reply_text = compare_two_players(nameA, nameB)
-
-    elif command == "player_update":
-        if not argument:
-            reply_text = "請在 !player_update 後加球員名字"
-        else:
-            player = yahoo_search_player_by_name(argument)
-            if not player:
-                reply_text = f"找不到球員：{argument}"
+            playerA = yahoo_search_player_by_name(nameA)
+            playerB = yahoo_search_player_by_name(nameB)
+    
+            if not playerA or not playerB:
+                reply_text = "找不到其中一位球員，請確認名字"
             else:
-                detail = yahoo_get_player_detail(player["player_key"])
-                if not detail:
-                    reply_text = "查詢失敗"
-                else:
-                    status = detail.get("status")
-                    note = detail.get("injury")
-                    if not note:
-                        reply_text = f"{player['name']} 目前無傷病資訊"
-                    else:
-                        reply_text = (
-                            f"🩺 {player['name']}（{player['team']}）\n"
-                            f"狀態：{status}\n"
-                            f"傷病：{note}"
-                        )
+                from modules.fantasy.player_stats import (
+                    get_season_stats, 
+                    get_recent_stats, 
+                    format_stats_for_llm
+                )
+                from modules.fantasy.analysis_llm import compare_players
+    
+                # 取得 A 的 stats（season + 14 days）
+                statsA_season = get_season_stats(playerA["player_key"])
+                statsA_14 = get_recent_stats(playerA["player_key"], days=14)
+    
+                # 取得 B 的 stats（season + 14 days）
+                statsB_season = get_season_stats(playerB["player_key"])
+                statsB_14 = get_recent_stats(playerB["player_key"], days=14)
+    
+                # 格式化給 LLM
+                textA = (
+                    "【本季】\n" +
+                    format_stats_for_llm(statsA_season) +
+                    "\n\n【最近 14 天】\n" +
+                    format_stats_for_llm(statsA_14)
+                )
+    
+                textB = (
+                    "【本季】\n" +
+                    format_stats_for_llm(statsB_season) +
+                    "\n\n【最近 14 天】\n" +
+                    format_stats_for_llm(statsB_14)
+                )
+    
+                # LLM 分析
+                analysis = compare_players(playerA["name"], textA, playerB["name"], textB)
+    
+                reply_text = (
+                    f"📊 {playerA['name']} vs {playerB['name']} — Fantasy 比較\n\n"
+                    f"{analysis}"
+                )
+
 
     elif command == "nba":
         try:
@@ -1089,6 +1110,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
