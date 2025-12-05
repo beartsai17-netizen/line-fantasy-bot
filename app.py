@@ -26,6 +26,8 @@ from modules.llm import ask_bot_with_memory
 
 from modules.fantasy.player_stats import get_recent_stats, format_stats_for_llm
 from modules.fantasy.analysis_llm import analyze_last14
+from modules.fantasy.last14 import analyze_last14
+from modules.fantasy.value import analyze_value
 
 
 
@@ -1237,6 +1239,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
