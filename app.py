@@ -1,17 +1,12 @@
 import json
 import base64
 import urllib.parse
-import gspread
 import requests
 import datetime
-
-from oauth2client.service_account import ServiceAccountCredentials
-from openai import OpenAI
-
 import os
+
 from flask import Flask, request, abort, jsonify
 from dotenv import load_dotenv
-
 from linebot.v3 import WebhookHandler
 from linebot.v3.messaging import (
     Configuration,
@@ -21,6 +16,12 @@ from linebot.v3.messaging import (
     TextMessage,
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
+
+# ⭐ 新增這三個 import
+from modules.sheet_utils import get_gsheet, load_sheet_commands
+from modules.memory import save_group_message, load_group_memory
+from modules.llm import ask_bot_with_memory
+
 
 
 # ==============================
@@ -42,67 +43,6 @@ app = Flask(__name__)
 configuration = Configuration(access_token=CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(CHANNEL_SECRET)
 client = OpenAI(api_key=OPENAI_KEY)
-
-
-# ==============================
-# Google Sheet Utils
-# ==============================
-def get_gsheet():
-    credentials_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
-    credentials = ServiceAccountCredentials.from_json_keyfile_dict(
-        credentials_info,
-        scopes=[
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive",
-        ],
-    )
-    gc = gspread.authorize(credentials)
-    return gc.open_by_url(os.getenv("GOOGLE_SHEET_URL"))
-
-
-def load_sheet_commands():
-    try:
-        sheet = get_gsheet().worksheet("keyword_reply")
-        rows = sheet.get_all_records()
-        return {row["keyword"].lower(): row["response"] for row in rows}
-    except Exception as e:
-        print("❌ Google Sheet 載入失敗:", e)
-        return {}
-
-def save_group_message(event, text):
-    try:
-        # 僅記錄群組訊息
-        if event.source.type != "group":
-            return
-
-        sheet = get_gsheet().worksheet("group_memory")
-
-        ts = datetime.datetime.now().isoformat()
-        group_id = event.source.group_id
-        user = event.source.user_id  # 若你後續要反查 LINE displayName 可加上
-
-        sheet.append_row([ts, group_id, user, text])
-
-    except Exception as e:
-        print("❌ 無法寫入聊天記錄:", e)
-
-def load_group_memory(group_id, limit=80):
-    try:
-        sheet = get_gsheet().worksheet("group_memory")
-        rows = sheet.get_all_records()
-
-        msgs = [r for r in rows if str(r["group_id"]) == str(group_id)]
-        msgs = msgs[-limit:]  # 取最新 N 則
-
-        memory_text = ""
-        for m in msgs:
-            memory_text += f"{m['user']}: {m['text']}\n"
-
-        return memory_text
-
-    except Exception as e:
-        print("❌ 無法讀取群組記憶:", e)
-        return ""
 
 
 # ==============================
@@ -926,28 +866,28 @@ def callback():
 # ==============================
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
-    # 1. 先處理 LINE 的重送機制（避免重複記錄＆重複回覆）
+    # 先處理重送訊息
     if event.delivery_context.is_redelivery:
         print("🔁 忽略重送訊息")
         return
 
     user_text = event.message.text.strip()
 
-    # 2. 群組中「非指令」→ 只記錄到 group_memory，不回覆
+    # 群組內非指令 → 記錄訊息，不回覆
     if event.source.type == "group" and not user_text.startswith("!"):
         save_group_message(event, user_text)
-        return   # 🚨 一定要有，否則會跑到下面的 reply_message
+        return
 
-    # 3. 不是「!」開頭的，直接忽略（例如一對一聊天）
+    # 非 ! 開頭 → 不處理
     if not user_text.startswith("!"):
         return
 
-    # 4. 解析指令與參數
+    # 解析指令
     parts = user_text[1:].split(" ", 1)
     command = parts[0].lower()
     argument = parts[1] if len(parts) > 1 else ""
 
-    reply_text = "（沒有產生回覆）"   # 預設一個值，避免任何意外情況沒有設定
+    reply_text = "（沒有產生回覆）"
 
     # ===== Fantasy Module =====
     if command == "ff":
@@ -1074,25 +1014,23 @@ def handle_message(event):
             try:
                 group_id = event.source.group_id if event.source.type == "group" else ""
                 memory = load_group_memory(group_id, limit=80)
-
-                system_prompt = (
-                    "你是一個友善的 LINE 群組助理。\n"
-                    "請在回答時參考以下群組近期聊天內容：\n\n"
-                    f"{memory}\n"
-                    "——以上是群組背景——"
-                )
-
-                res = client.chat.completions.create(
-                    model="gpt-4.1",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": argument},
-                    ],
-                )
-                reply_text = res.choices[0].message.content
-
+                reply_text = ask_bot_with_memory(argument, memory)
             except Exception as e:
                 reply_text = f"ChatGPT 錯誤：{e}"
+
+    else:
+        # 未知指令 → 走 keyword_reply
+        cmds = load_sheet_commands()
+        reply_text = cmds.get(command, f"查無指令：{command}")
+
+    # 統一回覆
+    with ApiClient(configuration) as api_client:
+        MessagingApi(api_client).reply_message(
+            ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=reply_text)],
+            )
+        )
 
     else:
         # 未知指令 → fallback 到 Google Sheet keyword_reply 或提示
@@ -1116,6 +1054,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
