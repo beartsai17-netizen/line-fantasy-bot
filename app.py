@@ -1045,6 +1045,55 @@ def handle_message(event):
                     f"📊 {playerA['name']} vs {playerB['name']} — Fantasy 比較\n\n"
                     f"{analysis}"
                 )
+    # !trade <A> <B>
+    elif command == "trade":
+        try:
+            nameA, nameB = argument.split(" ", 1)
+        except:
+            reply_text = "用法：!trade Curry Lillard"
+        else:
+            playerA = yahoo_search_player_by_name(nameA)
+            playerB = yahoo_search_player_by_name(nameB)
+    
+            if not playerA or not playerB:
+                reply_text = "找不到其中一位球員，請確認名字"
+            else:
+                from modules.fantasy.player_stats import (
+                    get_season_stats, 
+                    get_recent_stats, 
+                    format_stats_for_llm
+                )
+                from modules.fantasy.analysis_llm import evaluate_trade
+    
+                # A 的資料
+                seasonA = get_season_stats(playerA["player_key"])
+                last14A = get_recent_stats(playerA["player_key"], days=14)
+    
+                textA = (
+                    "【本季】\n" +
+                    format_stats_for_llm(seasonA) +
+                    "\n\n【最近 14 天】\n" +
+                    format_stats_for_llm(last14A)
+                )
+    
+                # B 的資料
+                seasonB = get_season_stats(playerB["player_key"])
+                last14B = get_recent_stats(playerB["player_key"], days=14)
+    
+                textB = (
+                    "【本季】\n" +
+                    format_stats_for_llm(seasonB) +
+                    "\n\n【最近 14 天】\n" +
+                    format_stats_for_llm(last14B)
+                )
+    
+                # LLM 判斷交易
+                analysis = evaluate_trade(playerA["name"], textA, playerB["name"], textB)
+    
+                reply_text = (
+                    f"🔄 交易評估：{playerA['name']} ↔ {playerB['name']}\n\n"
+                    f"{analysis}"
+                )
 
 
     elif command == "nba":
@@ -1110,6 +1159,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
