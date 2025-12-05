@@ -963,26 +963,9 @@ def handle_message(event):
     # !last14 <name>
     elif command == "last14":
         if not argument:
-            reply_text = "用法：!last14 Curry"
+            reply_text = "用法範例：!last14 SGA"
         else:
-            player = yahoo_search_player_by_name(argument)
-            if not player:
-                reply_text = f"找不到球員：{argument}"
-            else:
-                from modules.fantasy.player_stats import get_recent_stats, format_stats_for_llm
-                from modules.fantasy.analysis_llm import analyze_last14
-    
-                stats14 = get_recent_stats(player["player_key"], days=14)
-                stats_text = format_stats_for_llm(stats14)
-    
-                # 使用 LLM 分析
-                analysis = analyze_last14(player["name"], stats_text)
-    
-                reply_text = (
-                    f"📆 {player['name']} 最近 14 天趨勢分析\n"
-                    f"{analysis}"
-                )
-
+            reply_text = analyze_last14(argument)
 
      # !injury <name>
     elif command == "injury":
@@ -1004,39 +987,9 @@ def handle_message(event):
     # !value <name>
     elif command == "value":
         if not argument:
-            reply_text = "用法：!value Curry"
+            reply_text = "用法範例：!value Kawhi"
         else:
-            player = yahoo_search_player_by_name(argument)
-            if not player:
-                reply_text = f"找不到球員：{argument}"
-            else:
-                from modules.fantasy.player_stats import (
-                    get_season_stats, 
-                    get_recent_stats, 
-                    format_stats_for_llm
-                )
-                from modules.fantasy.analysis_llm import analyze_value
-                from modules.fantasy.player_stats import format_injury_status
-    
-                # 1. season stats
-                season_stats = get_season_stats(player["player_key"])
-                season_text = format_stats_for_llm(season_stats)
-    
-                # 2. last 14 days
-                last14_stats = get_recent_stats(player["player_key"], days=14)
-                last14_text = format_stats_for_llm(last14_stats)
-    
-                # 3. injury
-                detail = yahoo_get_player_detail(player["player_key"])
-                injury_text = format_injury_status(detail)
-    
-                # 4. LLM 分析
-                analysis = analyze_value(player["name"], season_text, last14_text, injury_text)
-    
-                reply_text = (
-                    f"📈 {player['name']} — Fantasy 價值分析\n"
-                    f"{analysis}"
-                )
+            reply_text = analyze_value(argument)
 
      # !vs <nameA> <nameB>
     elif command == "vs":
@@ -1239,6 +1192,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
