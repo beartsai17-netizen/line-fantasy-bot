@@ -375,6 +375,47 @@ def yahoo_get_player_stats_by_date_range(player_key: str, days: int = 7):
     return all_stats
 
 
+def yahoo_get_fa_list(league_key, count=15):
+    """
+    抓取自由球員清單（按 Yahoo 排序）
+    """
+    path = f"league/{league_key}/players;status=FA;count={count}"
+    data = yahoo_api_get(path)
+    if not data:
+        return []
+
+    try:
+        players_obj = data["fantasy_content"]["league"][1]["players"]
+        result = []
+
+        for i in range(int(players_obj["count"])):
+            p = players_obj[str(i)]["player"]
+
+            info_list = p[0]
+
+            name = None
+            team = ""
+
+            for block in info_list:
+                if not isinstance(block, dict):
+                    continue
+                if "name" in block:
+                    name = block["name"]["full"]
+                if "editorial_team_abbr" in block:
+                    team = block["editorial_team_abbr"]
+
+            if not name:
+                continue
+
+            result.append({
+                "name": name,
+                "team": team
+            })
+
+        return result
+
+    except Exception:
+        return []
 
 
 
@@ -1159,6 +1200,7 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
