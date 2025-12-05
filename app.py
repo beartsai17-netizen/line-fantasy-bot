@@ -5,6 +5,8 @@ import requests
 import datetime
 import os
 
+from openai import OpenAI
+
 from flask import Flask, request, abort, jsonify
 from dotenv import load_dotenv
 from linebot.v3 import WebhookHandler
@@ -983,21 +985,19 @@ def handle_message(event):
      # !injury <name>
     elif command == "injury":
         if not argument:
-            reply_text = "用法：!injury Curry"
+            reply_text = "請在 !injury 後加球員名字"
         else:
             player = yahoo_search_player_by_name(argument)
             if not player:
                 reply_text = f"找不到球員：{argument}"
             else:
                 detail = yahoo_get_player_detail(player["player_key"])
-    
                 from modules.fantasy.player_stats import format_injury_status
                 injury_text = format_injury_status(detail)
-    
                 reply_text = (
                     f"🩺 {player['name']}（{player['team']}）傷病狀態\n"
                     f"{injury_text}"
-            )
+                )
 
     # !value <name>
     elif command == "value":
@@ -1228,19 +1228,6 @@ def handle_message(event):
             )
         )
 
-    else:
-        # 未知指令 → fallback 到 Google Sheet keyword_reply 或提示
-        cmds = load_sheet_commands()
-        reply_text = cmds.get(command, f"查無指令：{command}")
-
-    # 5. 統一回覆
-    with ApiClient(configuration) as api_client:
-        MessagingApi(api_client).reply_message(
-            ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=reply_text)],
-            )
-        )
 
 
 
@@ -1250,43 +1237,6 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
