@@ -178,3 +178,44 @@ def compare_players(nameA, textA, nameB, textB):
     )
 
     return res.choices[0].message.content
+
+def evaluate_trade(nameA, textA, nameB, textB):
+    """LLM：判斷 Fantasy 交易好壞（A 換 B）"""
+
+    prompt = f"""
+你是一位 Yahoo Fantasy 專業分析師，請分析以下 1-for-1 交易是否合理：
+
+【玩家 A】
+{nameA}
+數據：
+{textA}
+
+【玩家 B】
+{nameB}
+數據：
+{textB}
+
+請從以下面向評估：
+1. 類別價值變化（PTS / REB / AST / STL / BLK / 3PM / FG% / FT% / TO）
+2. 本季 baseline 與 role 穩定性
+3. 最近 14 天趨勢（上升 / 下滑）
+4. 傷病風險
+5. Regression 可能性（是否在 overperform / underperform）
+6. 隊伍 fit：不同類型隊伍是否因這筆交易變強或變弱
+7. 最終評價：
+   - 大賺
+   - 小賺
+   - 合理
+   - 小虧
+   - 大虧
+
+請清楚分段，產出專業 Fantasy 結論。
+"""
+
+    res = client.chat.completions.create(
+        model="gpt-4.1",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    return res.choices[0].message.content
+
